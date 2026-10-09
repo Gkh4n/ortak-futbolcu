@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - '.release-v03/payload.b64'
+      - '.github/workflows/publish-v03.yml'
   workflow_dispatch:
 permissions:
   contents: write
@@ -30,7 +31,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md game.py expanded_players.py stats.py server.py static/app.js static/styles.css tests/test_game.py tests/test_v03.py android/app/build.gradle android/app/src/main/java/com/ortakfutbolcu/game/MainActivity.java .github/workflows/android-apk.yml
+          git add README.md game.py expanded_players.py stats.py server.py static/app.js static/styles.css tests/test_game.py tests/test_v03.py android/app/build.gradle android/app/src/main/java/com/ortakfutbolcu/game/MainActivity.java
           if ! git diff --cached --quiet; then
             git commit -m "Ortak Futbolcu v0.3: profiles, rankings, draw after 11, forfeit, data"
             git push origin HEAD:main
