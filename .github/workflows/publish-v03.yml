@@ -1,0 +1,67 @@
+name: Publish v0.3 game and APK
+on:
+  push:
+    paths:
+      - '.release-v03/payload.b64'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Verify and unpack v0.3 update
+        run: |
+          set -euo pipefail
+          base64 --decode .release-v03/payload.b64 >/tmp/ortak-v03.tar.xz
+          echo 'adcafc757a1babc4a0fa910911e660c56c486064a881fc12a43f2ba6e76ff6fc  /tmp/ortak-v03.tar.xz' | sha256sum -c
+          tar -xJf /tmp/ortak-v03.tar.xz
+          test -f stats.py
+          test -f expanded_players.py
+          test -f tests/test_v03.py
+      - name: Check backend tests
+        run: |
+          python -m pip install -q -r requirements.txt pytest httpx
+          PYTHONPATH=. python -m pytest -q
+      - name: Commit tested code
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md game.py expanded_players.py stats.py server.py static/app.js static/styles.css tests/test_game.py tests/test_v03.py android/app/build.gradle android/app/src/main/java/com/ortakfutbolcu/game/MainActivity.java .github/workflows/android-apk.yml
+          if ! git diff --cached --quiet; then
+            git commit -m "Ortak Futbolcu v0.3: profiles, rankings, draw after 11, forfeit, data"
+            git push origin HEAD:main
+          fi
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android API 35
+        run: |
+          SDKMGR="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n1)"
+          test -n "$SDKMGR"
+          "$SDKMGR" --install 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build Android APK
+        working-directory: android
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ortak-futbolcu-v0.3.0
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view android-v0.3.0 --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload android-v0.3.0 android/app/build/outputs/apk/debug/app-debug.apk#ortak-futbolcu-v0.3.0.apk --repo "${{ github.repository }}" --clobber
+          else
+            cp android/app/build/outputs/apk/debug/app-debug.apk ortak-futbolcu-v0.3.0.apk
+            gh release create android-v0.3.0 ortak-futbolcu-v0.3.0.apk --repo "${{ github.repository }}" --title "Ortak Futbolcu v0.3.0 Android" --notes "Profiller, 3/1/0 puan tablosu, maksimum 11 tur, hükmen 3-0 ve 226 futbolcu."
+          fi
