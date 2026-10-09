@@ -14,7 +14,7 @@ def test_60_clubs_in_designer_order():
 
 def test_each_club_has_local_svg_logo():
     js=(ROOT/'static'/'app.js').read_text(encoding='utf8')
-    match=re.search(r'const TEAM_CRESTS = (\\{.*?\\});',js,flags=re.S)
+    match=re.search(r'const TEAM_CRESTS = ([{].*?[}]);',js,flags=re.S)
     assert match, 'club-crest map not found in JS'
     logos=json.loads(match.group(1))
     assert list(logos)==FEATURED_CLUBS
