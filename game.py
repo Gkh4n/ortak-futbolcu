@@ -155,6 +155,7 @@ PLAYER_HISTORIES: list[tuple[str, tuple[str, ...]]] = [
 
 from expanded_players import EXTRA_HISTORIES
 from community_histories import PLAYER_HISTORIES as COMMUNITY_HISTORIES
+from imported_missing_players import MISSING_HISTORIES
 # Merge by canonical footballer identity; the extra collection extends senior-club spells.
 CLUB_CANONICAL = {
  'Paris Saint-Germain':'PSG', 'Milan':'AC Milan', 'Atlético Madrid':'Atletico Madrid',
@@ -163,12 +164,15 @@ CLUB_CANONICAL = {
  'Başakşehir FK':'İstanbul Başakşehir', 'Inter Milan':'Inter', 'Sporting Lisbon':'Sporting CP',
  'Kasimpasa':'Kasımpaşa', 'Çaykur Rizespor':'Çaykur Rizespor',
  'Anji':'Anzhi Makhachkala', 'Anzhi':'Anzhi Makhachkala',
+ 'Newcastle':'Newcastle United', 'West Ham':'West Ham United',
+ 'Al-Nassr':'Al Nassr', 'Al Nassr FC':'Al Nassr',
+ 'PSV Eindhoven':'PSV', 'Schalke':'Schalke 04',
  'Olympique Marseille':'Marseille', 'B. Dortmund':'Borussia Dortmund'
 }
 def canonical_club(value: str) -> str:
     return CLUB_CANONICAL.get(value, value)
 _combined = {normalize(n): (n, {canonical_club(c) for c in cs}) for n, cs in PLAYER_HISTORIES}
-for n, clubs in (*EXTRA_HISTORIES, *COMMUNITY_HISTORIES):
+for n, clubs in (*EXTRA_HISTORIES, *COMMUNITY_HISTORIES, *MISSING_HISTORIES):
     k = normalize(n)
     if k in _combined:
         _combined[k][1].update(canonical_club(c) for c in clubs)
