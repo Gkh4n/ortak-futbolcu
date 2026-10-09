@@ -154,16 +154,46 @@ PLAYER_HISTORIES: list[tuple[str, tuple[str, ...]]] = [
 ]
 
 from expanded_players import EXTRA_HISTORIES
+from community_histories import PLAYER_HISTORIES as COMMUNITY_HISTORIES
 # Merge by canonical footballer identity; the extra collection extends senior-club spells.
-_combined = {normalize(n): (n, set(cs)) for n, cs in PLAYER_HISTORIES}
-for n, clubs in EXTRA_HISTORIES:
+CLUB_CANONICAL = {
+ 'Paris Saint-Germain':'PSG', 'Milan':'AC Milan', 'Atlético Madrid':'Atletico Madrid',
+ 'Manchester Utd':'Manchester United', 'Manchester City FC':'Manchester City',
+ 'Tottenham Hotspur':'Tottenham', 'Atletico de Madrid':'Atletico Madrid',
+ 'Başakşehir FK':'İstanbul Başakşehir', 'Inter Milan':'Inter', 'Sporting Lisbon':'Sporting CP',
+ 'Kasimpasa':'Kasımpaşa', 'Çaykur Rizespor':'Çaykur Rizespor',
+ 'Anji':'Anzhi Makhachkala', 'Anzhi':'Anzhi Makhachkala',
+ 'Olympique Marseille':'Marseille', 'B. Dortmund':'Borussia Dortmund'
+}
+def canonical_club(value: str) -> str:
+    return CLUB_CANONICAL.get(value, value)
+_combined = {normalize(n): (n, {canonical_club(c) for c in cs}) for n, cs in PLAYER_HISTORIES}
+for n, clubs in (*EXTRA_HISTORIES, *COMMUNITY_HISTORIES):
     k = normalize(n)
     if k in _combined:
-        _combined[k][1].update(clubs)
+        _combined[k][1].update(canonical_club(c) for c in clubs)
     else:
-        _combined[k] = (n, set(clubs))
+        _combined[k] = (n, {canonical_club(c) for c in clubs})
 PLAYER_HISTORIES = [(n, tuple(sorted(clubs, key=normalize))) for n, clubs in _combined.values()]
-CLUBS = sorted(set(c for _, cs in PLAYER_HISTORIES for c in cs), key=normalize)
+# The mobile team grid follows an intentional football-fan order, NOT A-Z.
+# Names are translated to the authoritative club identifiers elsewhere in this module.
+FEATURED_CLUBS = [
+    'Real Madrid','Barcelona','Manchester United','Manchester City','Liverpool','Arsenal',
+    'Chelsea','Tottenham','Bayern Münih','Borussia Dortmund','PSG','Juventus',
+    'Inter','AC Milan','Napoli','Atletico Madrid','Ajax','Benfica',
+    'Porto','Galatasaray','Fenerbahçe','Beşiktaş','Genoa','Parma',
+    'Kayserispor','Fiorentina','Sampdoria','Hellas Verona','Çaykur Rizespor','Torino',
+    'Atalanta','Gençlerbirliği','Ankaragücü','Udinese','Roma','Konyaspor',
+    'Trabzonspor','Bologna','Empoli','Braga','Palermo','Chievo Verona',
+    'Sporting CP','Sivasspor','Lecce','Vitória Guimarães','Antalyaspor','Bari',
+    'Salernitana','Monaco','Paços de Ferreira','Cagliari','Vitória Setúbal','Marseille',
+    'Kasımpaşa','Estoril','Rennes','Gil Vicente','Marítimo','Ascoli'
+]
+_available_clubs = {c for _, cs in PLAYER_HISTORIES for c in cs}
+# All clubs in the requested screenshot remain selectable, even with no verified crossover.
+CLUBS = [c for c in FEATURED_CLUBS]
+CLUBS.extend(c for c in sorted(_available_clubs, key=normalize) if c not in CLUBS)
+
 PLAYER_NAMES = [n for n, _ in PLAYER_HISTORIES]
 PAIR_PLAYERS: dict[frozenset[str], list[str]] = {}
 for name, clubs in PLAYER_HISTORIES:
@@ -220,6 +250,7 @@ class Match:
     overtime: bool = False
     timeout_at: float | None = None
     attempted: set[int] = field(default_factory=set)
+    passed: set[int] = field(default_factory=set)
 
     def choose(self, player: int, club: str) -> str:
         if self.phase != 'choose':
@@ -237,11 +268,8 @@ class Match:
             self.event = {'kind': 'same', 'headline': 'Aynı takım seçildi!', 'detail': f'{a} elendi. Bu tur puan yok.', 'clubs': [a, b]}
             self.phase = 'result'
             return 'same'
-        if not PAIR_PLAYERS.get(frozenset((a, b))):
-            self.picks = {}
-            self.event = {'kind': 'invalid', 'headline': 'Ortak futbolcu bulunamadı.', 'detail': 'Takımlar elenmedi, tur sayılmadı. Yeniden seçim yapın.'}
-            return 'invalid'
         self.attempted.clear()
+        self.passed.clear()
         self.pair = (a, b)
         self.used_clubs.update((a, b))
         self.phase = 'answer'
@@ -265,11 +293,24 @@ class Match:
         self.timeout_at = None
         return found
 
+    def pass_turn(self, player: int) -> bool:
+        """Consume a player's one answer opportunity. Return True when both finished."""
+        if self.phase != 'answer':
+            raise ValueError('Şu anda pas geçilemez.')
+        if player not in (0, 1):
+            raise ValueError('Oyuncu geçersiz.')
+        if player in self.attempted:
+            raise ValueError('Bu turdaki tek hakkını zaten kullandın.')
+        self.attempted.add(player)
+        self.passed.add(player)
+        return len(self.attempted) == 2
+
     def timeout(self) -> None:
         if self.phase != 'answer':
             raise ValueError('Süre zaten dolmamış veya tur aktif değil.')
         all_answered = len(self.attempted) == 2
-        self.event = {'kind': 'timeout', 'headline': 'İki cevap da yanlış!' if all_answered else 'Süre doldu!', 'detail': 'Bu turda puan kazanılmadı.', 'clubs': list(self.pair or ())}
+        possible = sorted(set(PAIR_PLAYERS.get(frozenset(self.pair or ()), [])), key=normalize)
+        self.event = {'kind': 'timeout', 'headline': 'İki oyuncu da pas geçti!' if len(self.passed) == 2 else 'Tur puansız bitti!' if all_answered else 'Süre doldu!', 'detail': 'Bu turda puan kazanılmadı.', 'clubs': list(self.pair or ()), 'revealed_players': possible}
         self.phase = 'result'
         self.timeout_at = None
 
@@ -300,6 +341,7 @@ class Match:
         self.phase = 'choose'
         self.picks = {}
         self.attempted.clear()
+        self.passed.clear()
         self.pair = None
         self.event = {}
         self.timeout_at = None

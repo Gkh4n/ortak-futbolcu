@@ -103,3 +103,19 @@ body[data-mode=room] .topbar{display:none}.game-page{padding-top:5px}.game-head{
 .game-page .score-player.right .score-name{text-align:right}
 body[data-mode=profile] .footer,body[data-mode=leaderboard] .footer{opacity:.35}
 @media(max-width:600px){.profile-hero{padding:17px;gap:13px}.profile-hero .big-avatar{width:58px;height:58px;font-size:24px}.profile-stats>div{padding:14px 2px}.profile-stats strong{font-size:24px}.profile-stats small{font-size:8px}.history-row{font-size:11px}.home-profile-actions .btn{font-size:10px}}
+
+/* Training mode, pass control, player reveal and image/monogram emblems */
+.practice-home{margin:12px 0 0;width:100%;justify-content:space-between;border-color:rgba(34,234,211,.52)!important}
+.pass-btn{margin-top:12px;min-height:50px}
+.answer-reveal{margin:18px auto;background:linear-gradient(145deg,rgba(11,31,58,.93),rgba(8,56,77,.8));border:1px solid rgba(65,229,207,.45);border-radius:18px;padding:17px 15px;max-width:680px;text-align:left}
+.answer-reveal .helper{margin:7px 0 12px!important}
+.answer-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.answer-tags span{display:inline-flex;padding:8px 12px;border:1px solid rgba(77,211,201,.3);border-radius:30px;background:rgba(20,55,84,.7);color:#edffff;font-size:13px;font-weight:650}
+.club-emblem{display:flex;justify-content:center;align-items:center;overflow:hidden}
+.club-emblem img{width:100%;height:100%;object-fit:contain;border-radius:50%;background:#fff;padding:4px}
+.crest-fallback{font-size:14px;font-weight:900}
+.practice-page .duel-stage{margin-top:6px}
+@media(max-width:600px){.practice-home{margin-top:11px}.answer-reveal{padding:14px 12px}.answer-tags span{font-size:12px;padding:7px 10px}}
+
+.club-badge img{width:86%;height:86%;object-fit:contain;background:#fff;border-radius:50%;padding:5px}
+.club-badge .crest-fallback{font-weight:900;font-size:22px}

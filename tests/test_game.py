@@ -63,11 +63,18 @@ def test_equal_after_seven_goes_into_overtime_and_plus_one_wins():
     assert m.scores == [2,1]
 
 
-def test_no_known_overlap_repick_same_round_without_elimination():
+def test_no_known_overlap_still_starts_valid_round():
     m=Match()
-    assert m.choose(0,'Lazio')=='waiting'
-    assert m.choose(1,'Leeds United')=='invalid'
-    assert m.round_number==1 and m.phase=='choose' and m.used_clubs==set() and m.picks=={}
+    assert m.choose(0,'Vitória Setúbal')=='waiting'
+    assert m.choose(1,'Ascoli')=='answer'
+    assert m.phase=='answer'
+    assert {'Vitória Setúbal','Ascoli'} <= m.used_clubs
+    m.timeout()
+    assert m.event['kind']=='timeout'
+    assert m.event['clubs']==['Vitória Setúbal','Ascoli']
+    assert m.event['revealed_players']==[]
+    assert m.advance() is False
+    assert m.round_number==2
 
 
 def test_turkish_accents_and_surname():

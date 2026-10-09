@@ -7,6 +7,7 @@ import asyncio
 from dataclasses import dataclass, field
 import os
 import secrets
+import random
 import string
 import time
 from pathlib import Path
@@ -17,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
 
-from game import CLUBS, PLAYER_NAMES, Match
+from game import CLUBS, PLAYER_NAMES, Match, PAIR_PLAYERS, valid_player_for_pair
 import accounts
 import social
 import stats
@@ -126,7 +127,9 @@ class Room:
 
     async def _advance_after_delay(self) -> None:
         try:
-            await asyncio.sleep(RESULT_SECONDS)
+            # Give players time to view revealed solutions without losing the round.
+            delay = 6.0 if self.match and self.match.event.get('revealed_players') else RESULT_SECONDS
+            await asyncio.sleep(delay)
             async with self.lock:
                 if not self.match or self.match.phase != 'result':
                     return
@@ -550,6 +553,15 @@ async def room_websocket(ws: WebSocket, code: str, token: str, session: str = ""
                             room.timer_task.cancel()
                         await room.broadcast()
                         await room.schedule_advance()
+                    elif action == 'pass':
+                        both = m.pass_turn(idx)
+                        if both:
+                            m.timeout()
+                            if room.timer_task:
+                                room.timer_task.cancel()
+                        await room.broadcast()
+                        if both:
+                            await room.schedule_advance()
                     else:
                         raise ValueError('Bilinmeyen işlem.')
                 except ValueError as exc:
@@ -602,3 +614,140 @@ async def get_tournament(code: str, token: str, user=Depends(auth_token)):
 
 if __name__ == '__main__':
     uvicorn.run(app, host=os.environ.get('HOST', '0.0.0.0'), port=int(os.environ.get('PORT', '8000')))
+
+
+# Solo practice: isolated from ranked match statistics and multiplayer rooms.
+@dataclass
+class Practice:
+    user_id: str
+    used_clubs: set[str] = field(default_factory=set)
+    round_number: int = 1
+    score: int = 0
+    phase: str = 'choose'
+    pair: tuple[str, str] | None = None
+    deadline: float | None = None
+    attempted: bool = False
+    event: dict = field(default_factory=dict)
+    updated_at: float = field(default_factory=time.time)
+
+    def expire(self):
+        if self.phase == 'answer' and self.deadline and time.time() >= self.deadline:
+            self.finish(False, 'Süre doldu!')
+
+    def finish(self, correct: bool, heading: str):
+        if self.phase != 'answer':
+            raise ValueError('Aktif tur bulunamadı.')
+        pool = sorted(set(PAIR_PLAYERS.get(frozenset(self.pair or ()), [])))
+        self.event = {'kind': 'point' if correct else 'timeout', 'headline': heading,
+                      'clubs': list(self.pair or ()), 'revealed_players': pool}
+        self.phase = 'result'
+        self.deadline = None
+        if correct:
+            self.score += 1
+        self.updated_at = time.time()
+
+    def state(self):
+        self.expire()
+        return {'phase': self.phase, 'round': self.round_number,
+                'score': self.score, 'used': sorted(self.used_clubs),
+                'clubs': list(self.pair) if self.pair else None,
+                'deadline': self.deadline, 'my_answered': self.attempted,
+                'event': self.event, 'answer_seconds': ANSWER_SECONDS,
+                'remaining_clubs': len(set(CLUBS) - self.used_clubs)}
+
+
+PRACTICES: dict[str, Practice] = {}
+
+
+class PracticePick(BaseModel):
+    club: str
+
+
+class PracticeAnswer(BaseModel):
+    name: str
+
+
+def practice_of(user):
+    if len(PRACTICES) > 1000:
+        cutoff = time.time() - 7200
+        for uid, match in list(PRACTICES.items()):
+            if match.updated_at < cutoff:
+                PRACTICES.pop(uid, None)
+    return PRACTICES.setdefault(user['id'], Practice(user['id']))
+
+
+@app.post('/api/practice/start')
+async def practice_start(user=Depends(auth_token)):
+    PRACTICES[user['id']] = Practice(user['id'])
+    return PRACTICES[user['id']].state()
+
+
+@app.get('/api/practice')
+async def practice_status(user=Depends(auth_token)):
+    return practice_of(user).state()
+
+
+@app.post('/api/practice/pick')
+async def practice_choose(data: PracticePick, user=Depends(auth_token)):
+    p = practice_of(user)
+    p.expire()
+    if p.phase != 'choose':
+        raise HTTPException(409, 'Önce mevcut turu tamamla.')
+    club = data.club
+    if club not in CLUBS or club in p.used_clubs:
+        raise HTTPException(400, 'Takım geçersiz veya elenmiş.')
+    # Select a different club with a known answer so training is actually useful.
+    candidates = [other for other in CLUBS if other not in p.used_clubs and other != club
+                  and PAIR_PLAYERS.get(frozenset((other, club)))]
+    if not candidates:
+        raise HTTPException(409, 'Bu takım için antrenman eşleşmesi kalmadı. Yeni antrenman başlat.')
+    opponent = random.choice(candidates)
+    p.pair = (club, opponent)
+    p.used_clubs.update((club, opponent))
+    p.phase = 'answer'
+    p.deadline = time.time() + ANSWER_SECONDS
+    p.attempted = False
+    p.event = {}
+    p.updated_at = time.time()
+    return p.state()
+
+
+@app.post('/api/practice/answer')
+async def practice_answer(data: PracticeAnswer, user=Depends(auth_token)):
+    p = practice_of(user)
+    p.expire()
+    if p.phase != 'answer' or p.attempted:
+        raise HTTPException(409, 'Bu tur için cevap hakkın yok.')
+    if not data.name.strip() or len(data.name) > 100:
+        raise HTTPException(400, 'Geçerli bir isim yaz.')
+    p.attempted = True
+    name = valid_player_for_pair(data.name, *p.pair)
+    p.finish(bool(name), f'Doğru! {name}' if name else 'Cevap yanlış!')
+    return p.state()
+
+
+@app.post('/api/practice/pass')
+async def practice_pass(user=Depends(auth_token)):
+    p = practice_of(user)
+    p.expire()
+    if p.phase != 'answer' or p.attempted:
+        raise HTTPException(409, 'Pas kullanılamaz.')
+    p.attempted = True
+    p.finish(False, 'Pas geçtin!')
+    return p.state()
+
+
+@app.post('/api/practice/next')
+async def practice_next(user=Depends(auth_token)):
+    p = practice_of(user)
+    p.expire()
+    if p.phase != 'result':
+        raise HTTPException(409, 'Önce bu tur tamamlanmalı.')
+    p.round_number += 1
+    p.phase = 'choose'
+    p.pair = None
+    p.deadline = None
+    p.attempted = False
+    p.event = {}
+    p.updated_at = time.time()
+    return p.state()

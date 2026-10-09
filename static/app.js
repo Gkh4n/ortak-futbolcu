@@ -4,7 +4,7 @@ const toastEl = document.getElementById('toast');
 const app = {
   mode: 'home', config: {clubs:[],player_count:0,answer_seconds:11},
   name: '', user:null, session: localStorage.getItem('of_session') || '', room:null, tournament:null,
-  socket:null, pingInterval:null, tournamentInterval:null, connectSeq:0, socialSocket:null, socialTimer:null, social:null, searchResults:[], backDialog:false, profile:null,
+  socket:null, pingInterval:null, tournamentInterval:null, connectSeq:0, socialSocket:null, socialTimer:null, social:null, searchResults:[], backDialog:false, profile:null, practice:null, practiceTimer:null,
 };
 function esc(x){return String(x ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function urlParam(key, val){const u=new URL(location.href);u.search='';if(key)u.searchParams.set(key,val);history.replaceState({game:true},'',u.pathname+u.search);}
@@ -31,10 +31,7 @@ function goBack(){
    showLeave();return;
  }
  if(app.mode==='home'||app.mode==='auth'){showLeave();return;}
- if(app.mode==='profile'){
-   if(app.profileReturnMode==='friends'){fetchSocial().then(renderFriends).catch(()=>goHome());return;}
-   if(app.profileReturnMode==='leaderboard'){showLeaderboard().catch(()=>goHome());return;}
- }
+ if(app.mode==='practice'){goHome();return;}
  goHome();
 }
 // Browser and Android back both follow the current in-app screen.
@@ -50,7 +47,7 @@ function badgeLabel(code){return esc(code.split(/\s+/).map(x=>x[0]).slice(0,2).j
 function clubShield(name,kind=''){return `<div class="crest ${kind}"><strong>${badgeLabel(name)}</strong><small>${esc(name)}</small></div>`;}
 function stopPolling(){if(app.tournamentInterval){clearInterval(app.tournamentInterval);app.tournamentInterval=null;}}
 function closeSocket(){app.connectSeq++;if(app.socket){const s=app.socket;app.socket=null;s.onclose=null;s.close();}if(app.pingInterval){clearInterval(app.pingInterval);app.pingInterval=null;}}
-function goHome(){exitOverlay();closeSocket();stopPolling();app.room=null;app.tournament=null;app.mode='home';urlParam();app.user?renderHome():renderAuth();}
+function goHome(){exitOverlay();clearInterval(app.practiceTimer);app.practiceTimer=null;app.practice=null;closeSocket();stopPolling();app.room=null;app.tournament=null;app.mode='home';urlParam();app.user?renderHome():renderAuth();}
 
 function renderAuth(kind='login'){
  app.mode='auth';const register=kind==='register';
@@ -89,7 +86,7 @@ function renderHome(){app.mode='home';document.body.dataset.mode='home';screen.i
     <span class="overline">⚡ FUTBOL BİLGİNİ KONUŞTUR</span>
     <h1>İKİ TAKIM.<br><span class="accent">TEK İSİM.</span><br>BÜYÜK ZAFER.</h1>
     <p>Takımını gizlice seç. Ortak futbolcuyu ilk sen bul, düelloyu kazan!</p>
-    <div class="hero-actions"><button class="btn" data-action="create-room">⚔ 1V1 ODA KUR <span>→</span></button><button class="btn secondary" data-action="create-tournament">🏆 TURNUVA KUR <span>→</span></button></div>
+    <div class="hero-actions"><button class="btn" data-action="create-room">⚔ 1V1 ODA KUR <span>→</span></button><button class="btn secondary" data-action="create-tournament">🏆 TURNUVA KUR <span>→</span></button></div><button class="btn secondary block practice-home" data-action="start-practice">◎ TEK KİŞİLİK ANTRENMAN <span>→</span></button>
   </section>
   <section class="home-main-actions">
     <div class="welcome-card"><span class="avatar big-avatar">${esc(app.name.charAt(0).toUpperCase())}</span><div class="profile-head"><span class="overline">OYUNCU PROFİLİ</span><h2>Hoş geldin, ${esc(app.name)}!</h2><p>Bir arkadaşına meydan oku veya turnuvaya katıl.</p></div></div>
@@ -102,9 +99,7 @@ function renderHome(){app.mode='home';document.body.dataset.mode='home';screen.i
 }
 function profileResultBadge(v){return v==='win'?'GALİBİYET':v==='draw'?'BERABERLİK':'MAĞLUBİYET';}
 async function showProfile(username){
-  const origin=app.mode;
   const data=await api('/api/users/'+enc(username)+'/profile');
-  app.profileReturnMode=origin==='friends'||origin==='leaderboard'?origin:'home';
   app.mode='profile';app.profile=data;urlParam();document.body.dataset.mode='profile';
   screen.innerHTML=`<section class="profile-page"><button class="back" data-action="back">← GERİ</button>
   <div class="panel profile-hero"><div class="avatar big-avatar">${esc(data.username[0].toUpperCase())}</div><div><span class="overline">OYUNCU KARTI</span><h1>${esc(data.username)}</h1><p>Toplam <strong>${data.points}</strong> lig puanı</p></div></div>
@@ -159,7 +154,16 @@ function renderTournamentCreate(){app.mode='create-tournament';screen.innerHTML=
 <div class="form-group"><label>OYUNCU SAYISI</label><select id="tournament-size" class="input"><option value="4">4 Oyuncu · 2 Yarı Final + Final</option><option value="8">8 Oyuncu · Çeyrek Final + Yarı Final + Final</option><option value="16">16 Oyuncu · Son 16 + Final</option></select></div><button class="btn block" data-action="confirm-tournament">TURNUVAYI OLUŞTUR →</button></div>`;}
 function readyPlayers(state){return `<div class="players-grid compact-ready">${state.players.map((p,i)=>`<div class="player-mini"><div class="avatar">${esc(p.name.charAt(0).toUpperCase())}</div><div><strong>${esc(p.name)}${i===state.me?' (Sen)':''}</strong><small class="${p.ready?'ready':p.online?'':'offline'}">${p.ready?'✓ Hazır':p.online?'● Çevrim içi':'○ Çevrimdışı'}</small></div></div>`).join('')}</div>`;}
 function usedBlock(state){return `<details class="used-panel"><summary>⊘ &nbsp; Elenen takımlar <strong>${state.used.length}</strong><span>⌄</span></summary>${state.used.length?`<div class="used-list">${state.used.map(n=>`<span class="used-item">${esc(n)}</span>`).join('')}</div>`:'<p class="helper">Henüz elenen takım yok.</p>'}</details>`;}
-function matchClub(name){return `<div class="match-club"><div class="club-badge large-badge">${badgeLabel(name)}</div><strong>${esc(name)}</strong></div>`;}
+const CREST_IDS = {'Real Madrid':86,'Barcelona':81,'Manchester United':66,'Manchester City':65,'Liverpool':64,'Arsenal':57,'Chelsea':61,'Tottenham':73,'Bayern Münih':5,'Borussia Dortmund':4,'PSG':524,'Juventus':109,'Inter':108,'AC Milan':98,'Napoli':113,'Atletico Madrid':78,'Ajax':678,'Benfica':1903,'Porto':503,'Roma':100,'Fiorentina':99,'Torino':110,'Udinese':115,'Atalanta':102,'Lecce':5890,'Bologna':104};
+function clubCrest(name){const id=CREST_IDS[name];return id?`<img loading="lazy" alt="" src="https://crests.football-data.org/${id}.png" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span class="crest-fallback" style="display:none">${badgeLabel(name)}</span>`:`<span class="crest-fallback">${badgeLabel(name)}</span>`;}
+function matchClub(name){return `<div class="match-club"><div class="club-badge large-badge">${clubCrest(name)}</div><strong>${esc(name)}</strong></div>`;}
+function revealedAnswers(event){if(event?.kind!=='timeout')return '';
+ const list=event.revealed_players||[];
+ return `<div class="answer-reveal"><span class="overline">İKİ TAKIMDA DA OYNAYANLAR</span>${list.length?
+ `<p class="helper">Nasıl bilemedik? İşte kabul edilen cevaplar:</p><div class="answer-tags">${list.map(n=>`<span>${esc(n)}</span>`).join('')}</div>`:
+ `<p class="helper">Veritabanımızda bu iki takımda oynamış doğrulanmış futbolcu bulunamadı. Takım eşleşmesi yine geçerlidir.</p>`}</div>`;
+}
+
 function renderRoom(){if(!app.room||!app.room.state)return;app.mode='room';document.body.dataset.mode='room';const s=app.room.state,me=s.me;
 const label=s.overtime?`UZATMA · ${s.round}/11`:`TUR ${s.round} / 7`;
 const progress=s.overtime?'':`<div class="round-progress">${Array.from({length:7},(_,i)=>`<div class="round-dot ${i<s.round-1?'done':i===s.round-1?'current':''}"></div>`).join('')}</div>`;
@@ -169,14 +173,14 @@ board=`<div class="center room-lobby"><div class="lobby-illustration">⚔</div><
 }else if(s.phase==='choose'){
 const chosen=Boolean(s.my_pick),free=app.config.clubs.filter(c=>!s.used.includes(c));
 board=`<div class="arena-intro"><span class="overline">GİZLİ TAKIM SEÇİMİ</span><h2>${chosen?'Seçimin kilitlendi':'Bir takım seç'}</h2><p class="helper">${chosen?`<strong>${esc(s.my_pick)}</strong> seçtin. Rakibinin seçimi bekleniyor.`:'Rakibin hangi kulübü seçtiğini göremezsin. Elenen takımlar kullanılamaz.'}</p></div>${readyPlayers(s)}
-${!chosen?`<input class="input club-search" type="search" id="club-search" placeholder="⌕  Takım ara..." autocomplete="off"><div class="club-grid">${free.map(c=>`<button class="club-btn" data-action="choose" data-club="${esc(c)}"><span class="club-emblem">${badgeLabel(c)}</span><span>${esc(c)}</span></button>`).join('')}</div>`:`<div class="waiting-pick"><span class="spinner-ring"></span><strong>Rakip bekleniyor</strong><small>İki seçim tamamlanınca soru açılır.</small></div>`}
+${!chosen?`<input class="input club-search" type="search" id="club-search" placeholder="⌕  Takım ara..." autocomplete="off"><div class="club-grid">${free.map(c=>`<button class="club-btn" data-action="choose" data-club="${esc(c)}"><span class="club-emblem">${clubCrest(c)}</span><span>${esc(c)}</span></button>`).join('')}</div>`:`<div class="waiting-pick"><span class="spinner-ring"></span><strong>Rakip bekleniyor</strong><small>İki seçim tamamlanınca soru açılır.</small></div>`}
 ${s.event?.kind==='invalid'?`<p class="helper warning-text">⚠ ${esc(s.event.detail)}</p>`:''}`;
 }else if(s.phase==='answer'){
 const [a,b]=s.clubs||['',''];const done=!!s.my_answered;
 board=`<div class="duel-stage"><div class="two-crests">${matchClub(a)}<div class="vs">VS</div>${matchClub(b)}</div><div class="timer-wrap"><span class="timer-icon">◷</span><div class="timer" id="countdown">${String(app.config.answer_seconds).padStart(2,'0')}</div><span class="timer-label">SANİYE</span></div><h2 class="answer-title">Ortak oyuncu <span class="accent">kim?</span></h2><p class="helper center">${done?'Tek cevap hakkını kullandın. Rakibini bekle.':'11 saniye • Tek cevap hakkın var!'}</p>
-${!done?`<form id="answer-form" class="answer-bar"><input id="answer" class="input" placeholder="Futbolcu adı" autocomplete="off" maxlength="100" aria-label="Futbolcu adı" enterkeyhint="send"><button type="submit" class="btn block">➤ GÖNDER</button></form>`:`<div class="submitted-box">✓ CEVABIN GÖNDERİLDİ</div>`}</div>`;
+${!done?`<form id="answer-form" class="answer-bar"><input id="answer" class="input" placeholder="Futbolcu adı" autocomplete="off" maxlength="100" aria-label="Futbolcu adı" enterkeyhint="send"><button type="submit" class="btn block">➤ GÖNDER</button></form><button type="button" class="btn secondary block pass-btn" data-action="pass">PAS GEÇ →</button>`:`<div class="submitted-box">✓ CEVAP HAKKIN KULLANILDI</div>`}</div>`;
 }else if(s.phase==='result'){
-const e=s.event||{},same=e.kind==='same';board=`<div class="result-hero"><div class="result-symbol ${same?'same':''}">${same?'⟷':e.kind==='point'?'✓':'⌛'}</div><span class="overline">${same?'AYNI TAKIM SEÇİLDİ':e.kind==='point'?'PUAN KAZANILDI':'PUANSIZ TUR'}</span><h2>${esc(e.headline||'Tur tamamlandı')}</h2><p>${esc(e.detail||'')}</p>${e.kind==='point'?`<span class="pill">+1 PUAN · ${esc(s.players[e.scorer]?.name||'Oyuncu')}</span>`:''}<p class="helper">Sonraki tur hazırlanıyor...</p></div>`;
+const e=s.event||{},same=e.kind==='same';board=`<div class="result-hero"><div class="result-symbol ${same?'same':''}">${same?'⟷':e.kind==='point'?'✓':'⌛'}</div><span class="overline">${same?'AYNI TAKIM SEÇİLDİ':e.kind==='point'?'PUAN KAZANILDI':'PUANSIZ TUR'}</span><h2>${esc(e.headline||'Tur tamamlandı')}</h2><p>${esc(e.detail||'')}</p>${e.kind==='point'?`<span class="pill">+1 PUAN · ${esc(s.players[e.scorer]?.name||'Oyuncu')}</span>`:''}${revealedAnswers(e)}<p class="helper">Sonraki tur hazırlanıyor...</p></div>`;
 }else if(s.phase==='finished'){
 const won=s.winner===me,draw=s.winner===null;board=`<div class="result-hero"><div class="champion">${draw?'🤝':won?'🏆':'⚔'}</div><span class="overline">MAÇ BİTTİ</span><h2>${draw?'BERABERE!':won?'ZAFER SENİN!':'MAÇ TAMAMLANDI'}</h2><div class="win-name">${draw?'İki oyuncu da +1 lig puanı kazandı':esc(s.players[s.winner]?.name||'Oyuncu')+' kazandı'}</div>${s.event?.kind==='forfeit'?'<p>Hükmen 3–0</p>':''}<p>${s.scores[0]} — ${s.scores[1]} • ${s.round}. tur</p>${s.tournament?'<button class="btn block" data-action="back-to-tournament">TURNUVA TABLOSUNA DÖN</button>':'<button class="btn block" data-action="home">ANA SAYFA</button>'}</div>`;
 }
@@ -194,6 +198,28 @@ function connectRoom(code,token){closeSocket();stopPolling();app.mode='room';app
  }
  connect();app.pingInterval=setInterval(updateCountdown,160);
 }
+
+// One-player training uses the SAME server-validated football histories as online 1v1.
+async function startPractice(){const s=await api('/api/practice/start',{method:'POST'});app.practice=s;renderPractice();}
+async function practiceAction(path,body){
+ try{const opts={method:'POST'};if(body)opts.body=JSON.stringify(body);app.practice=await api('/api/practice/'+path,opts);renderPractice();}catch(e){toast(e.message);}
+}
+function renderPractice(){const s=app.practice;if(!s)return;app.mode='practice';document.body.dataset.mode='practice';
+ const free=app.config.clubs.filter(c=>!s.used.includes(c));
+ let board='';
+ if(s.phase==='choose')board=`<div class="arena-intro"><span class="overline">TEK KİŞİLİK ANTRENMAN</span><h2>Bir takım seç</h2><p class="helper">Sistem ortak futbolcusu bulunan başka bir takım seçecek. 11 saniye içinde cevabı bul.</p></div><input class="input club-search" id="club-search" type="search" placeholder="⌕ Takım ara..." autocomplete="off"><div class="club-grid">${free.map(c=>`<button class="club-btn" data-action="practice-pick" data-club="${esc(c)}"><span class="club-emblem">${clubCrest(c)}</span><span>${esc(c)}</span></button>`).join('')}</div>`;
+ else if(s.phase==='answer'){const [a,b]=s.clubs||['',''];board=`<div class="duel-stage"><div class="two-crests">${matchClub(a)}<div class="vs">VS</div>${matchClub(b)}</div><div class="timer-wrap"><div class="timer" id="countdown">11</div><span class="timer-label">SANİYE</span></div><h2 class="answer-title">Ortak oyuncu <span class="accent">kim?</span></h2><p class="helper center">Tek cevap hakkın var!</p><form id="practice-answer-form" class="answer-bar"><input class="input" id="practice-answer" autocomplete="off" placeholder="Futbolcu adı" maxlength="100" required><button class="btn block" type="submit">➤ GÖNDER</button></form><button class="btn secondary block pass-btn" data-action="practice-pass">PAS GEÇ →</button></div>`;}
+ else if(s.phase==='result')board=`<div class="result-hero"><span class="overline">ANTRENMAN SONUCU</span><h2>${esc(s.event.headline||'Tur tamamlandı')}</h2><p>${esc((s.clubs||[]).join(' · '))}</p>${s.event.kind==='timeout'?revealedAnswers(s.event):`<div class="answer-reveal"><span class="overline">ORTAK FUTBOLCULAR</span><div class="answer-tags">${(s.event.revealed_players||[]).map(n=>`<span>${esc(n)}</span>`).join('')}</div></div>`}<button class="btn block" data-action="practice-next">SONRAKİ TUR →</button></div>`;
+ screen.innerHTML=`<section class="game-page practice-page"><div class="game-head"><button class="leave-match" data-action="practice-exit" aria-label="Ana sayfa">←</button><div class="compact-scoreboard"><div class="score-player"><span class="avatar">${esc(app.name[0]||'O')}</span><span class="score-name">${esc(app.name)}</span></div><div class="score-center"><strong>★ ${s.score}</strong></div><div class="score-player right"><span class="score-name">ANTRENMAN</span><span class="avatar">◎</span></div></div></div><div class="game-meta"><span class="pill">TUR ${s.round}</span><span class="room-tag">KENDİNİ DENE</span></div><div class="game-board">${board}</div>${usedBlock(s)}</section>`;
+ if(app.practiceTimer)clearInterval(app.practiceTimer);
+ if(s.phase==='answer'){
+  app.practiceTimer=setInterval(()=>{if(app.mode!=='practice'||app.practice?.phase!=='answer'){clearInterval(app.practiceTimer);return;}
+   const left=Math.max(0,Math.ceil((s.deadline*1000-Date.now())/1000));const el=document.getElementById('countdown');if(el){el.textContent=String(left).padStart(2,'0');el.classList.toggle('urgent',left<=3);}
+   if(left===0){clearInterval(app.practiceTimer);api('/api/practice').then(data=>{if(app.mode==='practice'){app.practice=data;renderPractice();}}).catch(e=>toast(e.message));}
+  },170);
+ }
+}
+
 function tournamentInvite(t){return `${location.origin}/?turnuva=${enc(t.code)}`;}
 function renderTournament(){if(!app.tournament||!app.tournament.state)return;app.mode='tournament';document.body.dataset.mode='tournament';const t=app.tournament.state;
  const rounds=t.rounds.map((list,i)=>`<section class="bracket-round"><h3>${i===t.rounds.length-1&&list.length===1?'FINAL':`${i+1}. AŞAMA`}</h3>${list.map(match=>`<div class="bracket-match">${match.players.map(p=>`<div class="bracket-line ${p===match.winner?'winner':''}"><span>${esc(p)}</span><small>${match.winner?(p===match.winner?'✓ KAZANDI':'ELENDİ'):'BEKLİYOR'}</small></div>`).join('')}</div>`).join('')}</section>`).join('');
@@ -228,6 +254,12 @@ async function handleClick(button){const action=button.dataset.action;try{
   }else{goHome();}
   return;
  }
+ if(action==='start-practice'){await startPractice();return;}
+ if(action==='practice-exit'){goHome();return;}
+ if(action==='practice-pick'){await practiceAction('pick',{club:button.dataset.club});return;}
+ if(action==='practice-pass'){await practiceAction('pass');return;}
+ if(action==='practice-next'){await practiceAction('next');return;}
+ if(action==='pass'){if(app.socket?.readyState===WebSocket.OPEN)app.socket.send(JSON.stringify({type:'pass'}));else toast('Bağlantı yok.');return;}
  if(action==='friends'){if(matchInProgress()){showLeave();return;}closeSocket();stopPolling();app.room=null;app.tournament=null;urlParam();await fetchSocial();renderFriends();return;}
  if(action==='add-friend'){await api('/api/social/requests',{method:'POST',body:JSON.stringify({user_id:button.dataset.id})});toast('Arkadaşlık isteği gönderildi!');await fetchSocial();return;}
  if(action==='accept-friend'||action==='decline-friend'){await api('/api/social/respond',{method:'POST',body:JSON.stringify({user_id:button.dataset.id,accept:action==='accept-friend'})});toast(action==='accept-friend'?'Artık arkadaşsınız!':'İstek reddedildi.');await fetchSocial();return;}
@@ -258,7 +290,7 @@ async function handleClick(button){const action=button.dataset.action;try{
  if(action==='play-tournament'){const code=app.tournament?.state?.my_match;if(!code)return;const token=app.tournament.token;connectRoom(code,token);return;}
 }catch(err){toast(err.message||'Bir hata oluştu.');}}
 document.addEventListener('click',(event)=>{const button=event.target.closest('[data-action]');if(button)handleClick(button);});
-document.addEventListener('submit',(event)=>{if(event.target.id==='friend-search-form'){event.preventDefault();const term=document.getElementById('friend-search')?.value?.trim()||'';app.searchTerm=term;api('/api/users/search?q='+enc(term)).then(x=>{app.searchResults=x.results;renderFriends();}).catch(e=>toast(e.message));return;}if(event.target.id==='auth-form'){event.preventDefault();doAuth().catch(err=>toast(err.message));return;}if(event.target.id==='answer-form'){event.preventDefault();const text=document.getElementById('answer')?.value.trim();if(!text){toast('Futbolcu adını yaz.');return;}if(!app.socket||app.socket.readyState!==WebSocket.OPEN){toast('Bağlantı kurulamadı.');return;}app.socket.send(JSON.stringify({type:'answer',name:text}));const field=document.getElementById('answer');if(field){field.disabled=true;field.blur();}const submit=document.querySelector('#answer-form button[type=submit]');if(submit)submit.disabled=true;}});
+document.addEventListener('submit',(event)=>{if(event.target.id==='friend-search-form'){event.preventDefault();const term=document.getElementById('friend-search')?.value?.trim()||'';app.searchTerm=term;api('/api/users/search?q='+enc(term)).then(x=>{app.searchResults=x.results;renderFriends();}).catch(e=>toast(e.message));return;}if(event.target.id==='auth-form'){event.preventDefault();doAuth().catch(err=>toast(err.message));return;}if(event.target.id==='practice-answer-form'){event.preventDefault();const name=document.getElementById('practice-answer')?.value.trim();if(name){const field=document.getElementById('practice-answer');if(field)field.disabled=true;practiceAction('answer',{name});}return;}if(event.target.id==='answer-form'){event.preventDefault();const text=document.getElementById('answer')?.value.trim();if(!text){toast('Futbolcu adını yaz.');return;}if(!app.socket||app.socket.readyState!==WebSocket.OPEN){toast('Bağlantı kurulamadı.');return;}app.socket.send(JSON.stringify({type:'answer',name:text}));const field=document.getElementById('answer');if(field){field.disabled=true;field.blur();}const submit=document.querySelector('#answer-form button[type=submit]');if(submit)submit.disabled=true;}});
 document.addEventListener('input',(event)=>{if(event.target.id==='club-search'){const q=event.target.value.toLocaleLowerCase('tr-TR');document.querySelectorAll('.club-btn').forEach(b=>{b.hidden=!b.dataset.club.toLocaleLowerCase('tr-TR').includes(q);});}});
 async function boot(){try{app.config=await api('/api/config');}catch{toast('Sunucuya ulaşılamadı.');}
  if(app.session){try{app.user=await api('/api/auth/me');app.name=app.user.username;}catch{app.session='';localStorage.removeItem('of_session');}}
