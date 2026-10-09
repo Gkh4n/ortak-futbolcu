@@ -19,6 +19,7 @@ import uvicorn
 
 from game import CLUBS, PLAYER_NAMES, Match
 import accounts
+import social
 
 ROOT = Path(__file__).parent
 app = FastAPI(title='Ortak Futbolcu MVP', docs_url='/api/docs')
@@ -27,7 +28,7 @@ app.mount('/static', StaticFiles(directory=ROOT / 'static'), name='static')
 ROOMS: dict[str, 'Room'] = {}
 TOURNAMENTS: dict[str, 'Tournament'] = {}
 CODE_SYMBOLS = string.ascii_uppercase + string.digits
-ANSWER_SECONDS = 30
+ANSWER_SECONDS = 11
 RESULT_SECONDS = 2.3
 
 
@@ -103,6 +104,8 @@ class Room:
                 m.event.get('clubs') if m and m.phase == 'result' else None),
             'event': dict(m.event) if m else {},
             'deadline': m.timeout_at if m else None,
+            'my_answered': player_idx in m.attempted if m else False,
+            'answers_submitted': len(m.attempted) if m else 0,
             'winner': m.winner if m else None,
             'tournament': self.tournament_code,
         }
@@ -277,6 +280,111 @@ async def leave_account(authorization: str | None = Header(default=None)):
     return {'ok': True}
 
 
+# Social notifications are persisted in PostgreSQL and fanned out via WebSocket
+# to every active signed-in device of the recipient.
+SOCIAL_CONNECTIONS: dict[str, set[WebSocket]] = {}
+
+
+async def push_social(user_id: str) -> None:
+    sockets = SOCIAL_CONNECTIONS.get(user_id)
+    if not sockets:
+        return
+    payload = {'type': 'social', 'notifications': social.notifications(user_id),
+               'relationships': social.friends_and_requests(user_id)}
+    for ws in list(sockets):
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            sockets.discard(ws)
+
+
+class FriendTarget(BaseModel):
+    user_id: str = Field(min_length=16, max_length=64)
+
+
+class FriendDecision(FriendTarget):
+    accept: bool
+
+
+@app.get('/api/users/search')
+async def search_users(q: str = '', user=Depends(auth_token)):
+    return {'results': social.find_users(user['id'], q)}
+
+
+@app.get('/api/social')
+async def get_social(user=Depends(auth_token)):
+    return {'relationships': social.friends_and_requests(user['id']),
+            'notifications': social.notifications(user['id'])}
+
+
+@app.post('/api/social/requests')
+async def send_friend_request(data: FriendTarget, user=Depends(auth_token)):
+    try:
+        result = social.send_request(user['id'], data.user_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    await push_social(data.user_id)
+    await push_social(user['id'])
+    return result
+
+
+@app.post('/api/social/respond')
+async def respond_friend_request(data: FriendDecision, user=Depends(auth_token)):
+    try:
+        result = social.respond_request(user['id'], data.user_id, data.accept)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    await push_social(data.user_id)
+    await push_social(user['id'])
+    return result
+
+
+@app.post('/api/social/read')
+async def read_social(user=Depends(auth_token)):
+    result = social.mark_read(user['id'])
+    await push_social(user['id'])
+    return result
+
+
+@app.post('/api/social/invite')
+async def invite_to_room(data: FriendTarget, user=Depends(auth_token)):
+    try:
+        # Invitations must create real playable 1v1 rooms and link the inviter.
+        if not social.is_friend(user['id'], data.user_id):
+            raise ValueError('Yalnızca arkadaşlarını maça davet edebilirsin.')
+        code, token = unique_code(ROOMS), new_token()
+        ROOMS[code] = Room(code, [Player(token, user['username'], user['id'])])
+        social.invite_friend(user['id'], data.user_id, code)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    await push_social(data.user_id)
+    return {'code': code, 'token': token}
+
+
+@app.websocket('/ws/social')
+async def social_websocket(ws: WebSocket, session: str = ''):
+    user = accounts.identify(session)
+    if not user:
+        await ws.close(code=1008)
+        return
+    await ws.accept()
+    user_id = user['id']
+    SOCIAL_CONNECTIONS.setdefault(user_id, set()).add(ws)
+    try:
+        await push_social(user_id)
+        while True:
+            await ws.receive_text()  # ping messages; no unauthenticated writes
+            if not accounts.identify(session):
+                await ws.close(code=1008)
+                return
+    except (WebSocketDisconnect, RuntimeError):
+        pass
+    finally:
+        SOCIAL_CONNECTIONS.get(user_id, set()).discard(ws)
+        if not SOCIAL_CONNECTIONS.get(user_id):
+            SOCIAL_CONNECTIONS.pop(user_id, None)
+
+
 @app.post('/api/rooms')
 async def create_room(user=Depends(auth_token)):
     code, token = unique_code(ROOMS), new_token()
@@ -357,8 +465,6 @@ async def room_websocket(ws: WebSocket, code: str, token: str, session: str = ""
                             room.schedule_timeout()
                             await room.broadcast()
                     elif action == 'answer':
-                        if time.monotonic() < room.last_attempt.get(idx, 0):
-                            raise ValueError('Yeni cevap için kısa bir süre bekle.')
                         if m.phase == 'answer' and m.timeout_at and time.time() >= m.timeout_at:
                             m.timeout()
                             await room.broadcast()
@@ -367,9 +473,18 @@ async def room_websocket(ws: WebSocket, code: str, token: str, session: str = ""
                         answer = message.get('name', '')
                         try:
                             m.answer(idx, answer)
-                        except ValueError:
-                            room.last_attempt[idx] = time.monotonic() + 1.3
-                            raise
+                        except ValueError as exc:
+                            # The first incorrect answer consumes the player's turn.
+                            # Broadcast the lock and close a round early when both miss.
+                            if m.phase == 'answer' and idx in m.attempted:
+                                if len(m.attempted) == 2:
+                                    m.timeout()
+                                    if room.timer_task: room.timer_task.cancel()
+                                    await room.broadcast()
+                                    await room.schedule_advance()
+                                else:
+                                    await room.broadcast()
+                            raise exc
                         if room.timer_task:
                             room.timer_task.cancel()
                         await room.broadcast()

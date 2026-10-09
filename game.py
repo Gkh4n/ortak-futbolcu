@@ -202,6 +202,7 @@ class Match:
     event: dict = field(default_factory=dict)
     overtime: bool = False
     timeout_at: float | None = None
+    attempted: set[int] = field(default_factory=set)
 
     def choose(self, player: int, club: str) -> str:
         if self.phase != 'choose':
@@ -223,6 +224,7 @@ class Match:
             self.picks = {}
             self.event = {'kind': 'invalid', 'headline': 'Ortak futbolcu bulunamadı.', 'detail': 'Takımlar elenmedi, tur sayılmadı. Yeniden seçim yapın.'}
             return 'invalid'
+        self.attempted.clear()
         self.pair = (a, b)
         self.used_clubs.update((a, b))
         self.phase = 'answer'
@@ -232,11 +234,14 @@ class Match:
     def answer(self, player: int, name: str) -> str:
         if self.phase != 'answer' or not self.pair:
             raise ValueError('Şu anda cevap verilemez.')
-        if not isinstance(name, str) or len(name) > 100:
-            raise ValueError('Geçersiz futbolcu adı.')
+        if player in self.attempted:
+            raise ValueError('Bu turdaki tek cevap hakkını kullandın.')
+        if not isinstance(name, str) or not name.strip() or len(name) > 100:
+            raise ValueError('Geçerli bir futbolcu adı yaz.')
+        self.attempted.add(player)
         found = valid_player_for_pair(name, *self.pair)
         if not found:
-            raise ValueError('Bu futbolcu iki takımda da oynamamış. Tekrar dene.')
+            raise ValueError('Yanlış cevap! Bu tur için hakkın bitti.')
         self.scores[player] += 1
         self.event = {'kind': 'point', 'headline': 'Doğru cevap!', 'detail': f'{found} • Oyuncu {player + 1} +1 puan', 'scorer': player, 'player': found, 'clubs': list(self.pair)}
         self.phase = 'result'
@@ -246,7 +251,8 @@ class Match:
     def timeout(self) -> None:
         if self.phase != 'answer':
             raise ValueError('Süre zaten dolmamış veya tur aktif değil.')
-        self.event = {'kind': 'timeout', 'headline': 'Süre doldu!', 'detail': 'Bu turda puan kazanılmadı.', 'clubs': list(self.pair or ())}
+        all_answered = len(self.attempted) == 2
+        self.event = {'kind': 'timeout', 'headline': 'İki cevap da yanlış!' if all_answered else 'Süre doldu!', 'detail': 'Bu turda puan kazanılmadı.', 'clubs': list(self.pair or ())}
         self.phase = 'result'
         self.timeout_at = None
 
@@ -269,6 +275,7 @@ class Match:
         self.overtime = self.round_number > 7
         self.phase = 'choose'
         self.picks = {}
+        self.attempted.clear()
         self.pair = None
         self.event = {}
         self.timeout_at = None
