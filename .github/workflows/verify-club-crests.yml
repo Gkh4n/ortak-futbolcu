@@ -1,0 +1,25 @@
+name: Verify 60 club crests
+on:
+  push:
+    paths:
+      - 'game.py'
+      - 'server.py'
+      - 'static/app.js'
+      - 'static/crests/**'
+      - 'tests/test_club_crests.py'
+      - '.github/workflows/verify-club-crests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: python -m pip install -r requirements.txt pytest
+      - name: Run emblem and roster regression tests
+        run: PYTHONPATH=. python -m pytest -q tests/test_club_crests.py
