@@ -153,3 +153,96 @@ body[data-mode=profile] .footer,body[data-mode=leaderboard] .footer{opacity:.35}
 .dm-form .btn{flex:0 0 auto;padding:12px 16px}
 .dm-unread{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:50%;margin-left:5px;padding:0 5px;background:#15dcc8;color:#00212e;font-size:11px}
 @media(max-width:480px){.dm-page{height:calc(100dvh - 185px);min-height:340px;border-radius:14px}.dm-header{gap:8px;padding:10px 8px}.dm-header .back{padding:9px 7px;font-size:12px}.dm-header .avatar{width:31px;height:31px;flex-basis:31px}.dm-header-name strong{font-size:14px}.dm-header .btn{padding:9px 8px;font-size:10px}.dm-form{padding:9px 8px}.dm-form .btn{padding:10px 9px;font-size:11px}}
+
+/* v0.4.4: duel/training cards — fixed crest frame; real logo never covers the club name.
+   Intentionally use completely separate class names from the selection grid. */
+.two-crests .match-club{
+  box-sizing:border-box;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  min-width:0;
+  min-height:170px;
+  height:auto;
+  overflow:hidden;
+  padding:15px 8px;
+}
+.two-crests .match-club .match-club-crest{
+  position:relative;
+  display:flex;
+  flex:0 0 78px;
+  align-items:center;
+  justify-content:center;
+  width:78px;
+  height:78px;
+  min-width:78px;
+  min-height:78px;
+  max-width:78px;
+  max-height:78px;
+  box-sizing:border-box;
+  overflow:hidden;
+  border-radius:50%;
+  border:2px solid #2d9abe;
+  background:#fff;
+  box-shadow:0 0 0 4px #0b4667aa,0 3px 14px #0004;
+}
+.two-crests .match-club .match-club-img{
+  position:static;
+  display:block;
+  flex:0 0 auto;
+  width:64px;
+  height:64px;
+  max-width:64px;
+  max-height:64px;
+  min-width:0;
+  min-height:0;
+  padding:0;
+  margin:0;
+  object-fit:contain;
+  object-position:center;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  transform:none;
+}
+.two-crests .match-club .match-club-fallback{
+  display:grid;
+  place-items:center;
+  width:64px;
+  height:64px;
+  font-size:19px;
+  color:#084066;
+  font-weight:900;
+}
+.two-crests .match-club .match-club-name{
+  display:block;
+  position:relative;
+  z-index:1;
+  flex:0 0 auto;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  min-height:2.4em;
+  text-align:center;
+  color:#f4faff;
+  font-size:clamp(12px,2.8vw,17px);
+  line-height:1.2;
+  font-weight:850;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  word-break:normal;
+  text-shadow:0 1px 4px #00172a;
+}
+@media(max-width:600px){
+  .two-crests .match-club{gap:10px;min-height:147px;padding:12px 4px}
+  .two-crests .match-club .match-club-crest{
+    flex-basis:64px;width:64px;height:64px;
+    min-width:64px;min-height:64px;max-width:64px;max-height:64px;
+  }
+  .two-crests .match-club .match-club-img{
+    width:52px;height:52px;max-width:52px;max-height:52px
+  }
+  .two-crests .match-club .match-club-name{font-size:clamp(11px,3.2vw,14px)}
+}

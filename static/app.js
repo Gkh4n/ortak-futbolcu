@@ -305,7 +305,15 @@ function clubCrest(name){
    ? `<img class="club-logo" loading="lazy" decoding="async" alt="${esc(name)} arması" src="/static${path}">`
    : `<span class="crest-fallback">${badgeLabel(name)}</span>`;
 }
-function matchClub(name){return `<div class="match-club"><div class="club-badge large-badge">${clubCrest(name)}</div><strong>${esc(name)}</strong></div>`;}
+function matchClub(name){
+ // Match cards must NOT inherit the club-grid emblem sizing or intrinsic SVG dimensions.
+ // The logo frame and club name are independent layout rows.
+ const crest=TEAM_CRESTS[name];
+ const logo=crest
+    ? `<img class="match-club-img" src="/static${crest}" width="64" height="64" alt="${esc(name)} arması" decoding="async">`
+    : `<span class="match-club-fallback">${badgeLabel(name)}</span>`;
+ return `<div class="match-club"><div class="match-club-crest">${logo}</div><strong class="match-club-name">${esc(name)}</strong></div>`;
+}
 function revealedAnswers(event){
  const list=event?.revealed_players||[];
  if(event?.kind!=='timeout'||!list.length)return '';
