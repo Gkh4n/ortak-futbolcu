@@ -31,9 +31,9 @@ def test_win_in_eighth_round_and_forfeit():
     for club in CLUBS[:7]:
         m.choose(0,club);m.choose(1,club);m.advance()
     assert m.round_number==8 and m.overtime
-    assert m.choose(0,'Real Madrid')=='waiting'
-    assert m.choose(1,'Barcelona')=='answer'
-    assert m.answer(1,'Ronaldo')=='Ronaldo Nazário'
+    assert m.choose(0,'Inter')=='waiting'
+    assert m.choose(1,'PSG')=='answer'
+    assert m.answer(1,'Mauro Icardi')=='Mauro Icardi'
     assert m.advance() and m.winner==1
     assert m.finish_reason=='normal'
     n=Match()
