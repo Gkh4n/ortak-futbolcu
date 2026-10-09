@@ -1,0 +1,9 @@
+<resources>
+  <style name="Theme.OrtakFutbolcu" parent="android:style/Theme.Material.NoActionBar">
+    <item name="android:colorAccent">#24D8B6</item>
+    <item name="android:statusBarColor">#07111E</item>
+    <item name="android:navigationBarColor">#07111E</item>
+    <item name="android:windowLightStatusBar">false</item>
+    <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+  </style>
+</resources>
