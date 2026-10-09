@@ -25,7 +25,8 @@ def test_each_club_has_local_svg_logo():
         content=path.read_text(encoding='utf8')
         assert '<svg' in content and '</svg>' in content,f'{club}: malformed svg'
 
-def test_both_team_pick_screens_use_60_team_list():
+def test_60_clubs_remain_in_solo_and_tournaments():
     js=(ROOT/'static'/'app.js').read_text(encoding='utf8')
     assert 'function selectionPool()' in js
-    assert js.count('selectionPool().filter(c=>!s.used.includes(c))')==2
+    assert 'const free=selectionPool().filter(c=>!s.used.includes(c));' in js
+    assert 's.tournament?selectionPool():multiplayerClubs()' in js

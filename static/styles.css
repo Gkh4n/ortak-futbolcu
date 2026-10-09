@@ -304,3 +304,12 @@ body[data-mode="chat"] .dm-send:disabled{opacity:.4}
  body[data-mode="chat"] .dm-messages{padding:13px 10px}
  body[data-mode="chat"] .dm-form{padding:8px}
 }
+
+/* v0.4.6: full direct 1v1 roster with progressive loading and global search. */
+.club-picker-summary{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px;margin:13px 1px 12px;color:#e4f9ff;font-size:12px}
+.club-picker-summary strong{font-size:11px;letter-spacing:1.25px;color:#60f7de;font-weight:900}
+.club-picker-summary #club-count{font-weight:700;color:#a8c8d9;font-size:11px}
+.club-more{margin:15px auto 18px;max-width:480px}
+.club-more .club-more-count{font-weight:500;color:#91b3c7;font-size:11px}
+.club-empty{grid-column:1/-1;padding:27px 12px;text-align:center;border:1px dashed #40809b;border-radius:15px;color:#a9cddd}
+.club-grid .club-btn[hidden]{display:none!important}

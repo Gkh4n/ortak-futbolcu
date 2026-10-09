@@ -63,3 +63,8 @@ Uygulama HTTPS/WSS üzerinden sunulmalıdır. Hesabın için şifre kurtarma, e-
 Maç ve tek kişilik antrenman ekranları kullanıcı tarafından belirlenen sabit sırada **60 kulüp** gösterir. Arama yalnızca bu 60 kulüp arasında yapılır; diğer kulüpler futbolcu geçmişi ve cevap doğrulama kayıtlarında korunur. Her seçilebilir kulübün gerçek amblemi `static/crests/01.svg`–`60.svg` altında yerel olarak sunulur.
 
 Amblem görselleri [JoseArroyave/football-logos](https://github.com/JoseArroyave/football-logos) kataloğundan alınmıştır (repo MIT lisanslıdır). Kulüp armaları ve markaları ilgili hak sahiplerinin ticari markalarıdır; katalog lisansı kulüp marka haklarının devredildiği anlamına gelmez.
+
+
+## v0.4.6: 1v1 tüm kulüpler
+
+Doğrudan **1v1** maçlarda futbolcu geçmişi veritabanındaki tüm kulüpler seçilebilir. İlk 60 popüler kulüp öne çıkar, devamı '60 takım daha göster' ile açılır. Arama tüm kulüplerin içinde çalışır. **Tek kişilik antrenman ve turnuva** ekranlarındaki 60 kulüplük düzen değişmez. Popüler 60 kulübün amblemleri yerel SVG dosyalarıyla gösterilir; diğer kulüpler için henüz arma bulunmadığında harfli yedek işaret görünür. Oyunda tüm kulüplerin ortak oyuncuları mevcut veritabanıyla kontrol edilir.
