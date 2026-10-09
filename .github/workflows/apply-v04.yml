@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'release-artifacts/game-v04.tar.xz.b64'
+      - '.github/workflows/apply-v04.yml'
   workflow_dispatch:
 permissions:
   contents: write
