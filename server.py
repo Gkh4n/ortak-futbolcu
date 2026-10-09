@@ -331,7 +331,8 @@ async def push_social(user_id: str) -> None:
     if not sockets:
         return
     payload = {'type': 'social', 'notifications': social.notifications(user_id),
-               'relationships': social.friends_and_requests(user_id)}
+               'relationships': social.friends_and_requests(user_id),
+               'chat_unreads': social.chat_unreads(user_id)}
     for ws in list(sockets):
         try:
             await ws.send_json(payload)
@@ -347,6 +348,10 @@ class FriendDecision(FriendTarget):
     accept: bool
 
 
+class DirectMessage(BaseModel):
+    body: str = Field(min_length=1, max_length=500)
+
+
 @app.get('/api/users/search')
 async def search_users(q: str = '', user=Depends(auth_token)):
     return {'results': social.find_users(user['id'], q)}
@@ -355,7 +360,8 @@ async def search_users(q: str = '', user=Depends(auth_token)):
 @app.get('/api/social')
 async def get_social(user=Depends(auth_token)):
     return {'relationships': social.friends_and_requests(user['id']),
-            'notifications': social.notifications(user['id'])}
+            'notifications': social.notifications(user['id']),
+            'chat_unreads': social.chat_unreads(user['id'])}
 
 
 @app.post('/api/social/requests')
@@ -383,6 +389,27 @@ async def respond_friend_request(data: FriendDecision, user=Depends(auth_token))
 @app.post('/api/social/read')
 async def read_social(user=Depends(auth_token)):
     result = social.mark_read(user['id'])
+    await push_social(user['id'])
+    return result
+
+
+@app.get('/api/chat/{friend_id}')
+async def get_chat(friend_id: str, user=Depends(auth_token)):
+    try:
+        result = social.conversation(user['id'], friend_id)
+    except ValueError as exc:
+        raise HTTPException(403, str(exc)) from None
+    await push_social(user['id'])
+    return result
+
+
+@app.post('/api/chat/{friend_id}')
+async def send_chat(friend_id: str, data: DirectMessage, user=Depends(auth_token)):
+    try:
+        result = social.send_chat_message(user['id'], friend_id, data.body)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    await push_social(friend_id)
     await push_social(user['id'])
     return result
 

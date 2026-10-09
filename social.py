@@ -20,6 +20,18 @@ def _init(db):
         room_code TEXT,
         unread INTEGER NOT NULL DEFAULT 1,
         created_at BIGINT NOT NULL)''')
+    db.execute('''CREATE TABLE IF NOT EXISTS direct_messages (
+        id TEXT PRIMARY KEY,
+        user_low TEXT NOT NULL REFERENCES users(id),
+        user_high TEXT NOT NULL REFERENCES users(id),
+        sender TEXT NOT NULL REFERENCES users(id),
+        body TEXT NOT NULL,
+        unread INTEGER NOT NULL DEFAULT 1,
+        created_at BIGINT NOT NULL)''')
+    db.execute('''CREATE INDEX IF NOT EXISTS ix_dm_pair ON direct_messages
+        (user_low,user_high,created_at,id)''')
+    db.execute('''CREATE INDEX IF NOT EXISTS ix_dm_unread ON direct_messages
+        (user_low,user_high,sender,unread)''')
 
 
 def _pair(a, b):
@@ -142,3 +154,59 @@ def invite_friend(user_id, friend_id, code):
         _init(db)
         _notification(db,friend_id,user_id,'game_invite',code)
     return {'ok':True,'recipient_id':friend_id,'room_code':code}
+
+# Direct messages: available only between users with an accepted friendship.
+# All SQL parameters are bound; messages are plain text, not HTML.
+def chat_unreads(user_id):
+    with _connection() as db:
+        _init(db)
+        rows=db.execute('''SELECT sender,COUNT(*) AS unread_count FROM direct_messages
+            WHERE (user_low=? OR user_high=?) AND sender<>? AND unread=1
+            GROUP BY sender''',(user_id,user_id,user_id)).fetchall()
+        return {r['sender']:r['unread_count'] for r in rows}
+
+
+def conversation(user_id, friend_id):
+    if not is_friend(user_id, friend_id):
+        raise ValueError('Yalnızca arkadaşlarınla mesajlaşabilirsin.')
+    low,high=_pair(user_id,friend_id)
+    with _connection() as db:
+        _init(db)
+        friend=db.execute('SELECT id,username FROM users WHERE id=?',(friend_id,)).fetchone()
+        if not friend: raise ValueError('Kullanıcı bulunamadı.')
+        rows=db.execute('''SELECT id,sender,body,created_at FROM
+            (SELECT id,sender,body,created_at FROM direct_messages
+             WHERE user_low=? AND user_high=?
+             ORDER BY created_at DESC,id DESC LIMIT 80) AS recent
+            ORDER BY created_at ASC,id ASC''',(low,high)).fetchall()
+        db.execute('''UPDATE direct_messages SET unread=0
+            WHERE user_low=? AND user_high=? AND sender=? AND unread=1''',(low,high,friend_id))
+        db.execute("UPDATE social_notifications SET unread=0 WHERE recipient=? AND sender=? AND category='message'",(user_id,friend_id))
+        return {'friend':{'id':friend['id'],'username':friend['username']},
+                'messages':[{'id':r['id'],'sender_id':r['sender'],'body':r['body'],
+                             'created_at':r['created_at']} for r in rows]}
+
+
+def send_chat_message(user_id, friend_id, body):
+    if not is_friend(user_id, friend_id):
+        raise ValueError('Yalnızca arkadaşlarınla mesajlaşabilirsin.')
+    if not isinstance(body,str):
+        raise ValueError('Mesaj metni geçersiz.')
+    body=body.strip()
+    if not 1 <= len(body) <= 500:
+        raise ValueError('Mesaj 1 ile 500 karakter arasında olmalı.')
+    if any(ord(char)<32 and char not in '\\n\\t' for char in body):
+        raise ValueError('Mesaj geçersiz karakter içeriyor.')
+    low,high=_pair(user_id,friend_id)
+    now=int(time.time())
+    mid=f'{time.time_ns():020d}{secrets.token_hex(6)}'
+    with _connection() as db:
+        _init(db)
+        last=db.execute('''SELECT created_at FROM direct_messages WHERE sender=?
+                          ORDER BY created_at DESC LIMIT 1''',(user_id,)).fetchone()
+        if last and last['created_at'] >= now:
+            raise ValueError('Bir sonraki mesajdan önce bir saniye bekle.')
+        db.execute('''INSERT INTO direct_messages (id,user_low,user_high,sender,body,unread,created_at)
+               VALUES (?,?,?,?,?,1,?)''',(mid,low,high,user_id,body,now))
+        _notification(db,friend_id,user_id,'message')
+    return {'id':mid,'sender_id':user_id,'body':body,'created_at':now}
