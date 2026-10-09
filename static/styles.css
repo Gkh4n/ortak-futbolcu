@@ -74,3 +74,32 @@ body[data-mode=room] .topbar{display:none}.game-page{padding-top:5px}.game-head{
 @media(min-width:850px){.home-hero{padding:55px}.home-hero:before{width:300px;height:300px;right:6%;top:12%}.home-main-actions{grid-template-columns:1fr 1fr;align-items:stretch}.welcome-card{grid-column:1 / -1}.friend-card-btn{grid-column:1 / -1}.home-join-row{grid-column:1 / -1}.home-mini-stats{grid-column:1 / -1}.logout-link{grid-column:1 / -1}.game-page{max-width:750px;margin:auto}.club-grid{max-height:600px}}
 @media(max-width:600px){.topbar{height:64px}.top-status{padding:8px 9px;font-size:8px;letter-spacing:.5px}.brand-text{font-size:12px}.screen{padding:16px 0 30px}.home-hero{padding:26px 20px 25px}.home-hero h1{font-size:clamp(36px,10.4vw,53px);letter-spacing:-1.8px}.home-hero p{max-width:280px}.home-hero:before{width:160px;height:160px;right:-86px;top:50px;opacity:.6}.welcome-card{padding:14px;gap:13px}.avatar.big-avatar{width:50px;height:50px;flex-shrink:0}.home-mini-stats{font-size:9px}.game-page{padding:2px 0}.compact-scoreboard{padding:8px 6px}.compact-scoreboard .score-player{gap:4px}.compact-scoreboard .avatar{width:28px;height:28px;font-size:13px}.compact-scoreboard .score-name{font-size:11px}.compact-scoreboard .score-center{padding:8px 7px}.compact-scoreboard .score-center strong{font-size:19px}.leave-match{width:40px}.game-board{padding:11px 5px}.club-grid{gap:7px;padding:2px 5px 7px}.club-btn{min-height:103px;font-size:11px;padding:9px 4px}.club-emblem{width:43px;height:43px;font-size:13px}.large-badge{width:66px;height:66px;font-size:22px}.match-club{min-height:153px;gap:11px}.two-crests{grid-template-columns:minmax(0,1fr) 40px minmax(0,1fr)}.two-crests .vs{width:40px;height:40px;font-size:13px}.room-tag{font-size:9px}.social-panel{padding:14px}.social-row{gap:7px}.social-row .btn{padding:7px 9px;font-size:10px}.footer{font-size:7px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+
+/* v0.3 — profiles, league, responsive match navigation */
+.home-profile-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.home-profile-actions .btn{min-width:0;font-size:11px;padding:12px 8px}
+.profile-page,.standings-page{max-width:800px;margin:auto}
+.profile-hero{display:flex;align-items:center;gap:22px;background:linear-gradient(110deg,#0b3455,#0c1a31);border-color:#2783a5;padding:25px;margin:10px 0 16px}
+.profile-hero h1{font-size:clamp(28px,5vw,46px);overflow-wrap:anywhere;margin:0 0 8px}
+.profile-hero p{margin:0;color:#9ebdcc}
+.profile-hero .big-avatar{font-size:34px;width:84px;height:84px;flex:none;border:2px solid #3fe3da;box-shadow:0 0 25px #2deacc4d}
+.profile-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:15px}
+.profile-stats>div{padding:19px 6px;border:1px solid #23799c;border-radius:16px;text-align:center;background:linear-gradient(140deg,#123855,#08203a)}
+.profile-stats strong{display:block;font-size:30px;font-weight:950;color:#60f4de}
+.profile-stats small{font-size:10px;letter-spacing:.2px;color:#b5d0e2}
+.profile-name-link{background:transparent;border:0;color:inherit;padding:0;font:inherit;font-weight:800;cursor:pointer;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.profile-name-link:hover{text-decoration:underline;color:var(--cyan)}
+.history-row{display:flex;align-items:center;gap:10px;padding:13px 0;border-bottom:1px solid #254962;flex-wrap:wrap;font-size:13px}
+.history-row:last-child{border-bottom:0}
+.result-mark{font-weight:900;font-size:10px;min-width:82px;color:#b5d1e0}
+.result-mark.win{color:#56eebd}.result-mark.draw{color:#eacc78}.result-mark.loss{color:#fd9292}
+.history-other{flex:1;min-width:95px;overflow-wrap:anywhere}.history-row>small{color:#e9ac77}
+.table-scroll{overflow-x:auto;padding:12px}
+.league-table{border-collapse:collapse;width:100%;font-size:clamp(11px,2.2vw,15px);text-align:left}
+.league-table th{color:#8eb5c9;letter-spacing:1px;font-size:10px;padding:12px 7px;background:#09253c}
+.league-table td{padding:13px 7px;border-bottom:1px solid #25506f}
+.league-table th:last-child,.league-table td:last-child{color:#4df5d4;text-align:center}
+.game-page .score-name.profile-name-link{background:none;color:#e8f7ff;border:0;max-width:100%;text-align:left}
+.game-page .score-player.right .score-name{text-align:right}
+body[data-mode=profile] .footer,body[data-mode=leaderboard] .footer{opacity:.35}
+@media(max-width:600px){.profile-hero{padding:17px;gap:13px}.profile-hero .big-avatar{width:58px;height:58px;font-size:24px}.profile-stats>div{padding:14px 2px}.profile-stats strong{font-size:24px}.profile-stats small{font-size:8px}.history-row{font-size:11px}.home-profile-actions .btn{font-size:10px}}

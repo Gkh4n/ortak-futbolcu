@@ -20,6 +20,7 @@ import uvicorn
 from game import CLUBS, PLAYER_NAMES, Match
 import accounts
 import social
+import stats
 
 ROOT = Path(__file__).parent
 app = FastAPI(title='Ortak Futbolcu MVP', docs_url='/api/docs')
@@ -132,12 +133,21 @@ class Room:
                 ended = self.match.advance()
                 self.last_attempt.clear()
                 await self.broadcast()
-                if ended and self.tournament_code:
-                    tournament = TOURNAMENTS.get(self.tournament_code)
-                    if tournament:
-                        await tournament.record_result(self.code, self.players[self.match.winner].token)
+                if ended:
+                    await self.finish_match()
         except asyncio.CancelledError:
             pass
+
+    async def finish_match(self) -> None:
+        """Persist once and advance the bracket. Invoked under room lock."""
+        if not self.match or self.match.phase != 'finished':
+            return
+        stats.record_match(self.code, self.players, self.match, self.tournament_code)
+        if self.tournament_code:
+            tournament = TOURNAMENTS.get(self.tournament_code)
+            if tournament:
+                winner_token = self.players[self.match.winner].token if self.match.winner is not None else None
+                await tournament.record_result(self.code, winner_token)
 
     def schedule_timeout(self) -> None:
         if self.timer_task:
@@ -187,12 +197,25 @@ class Tournament:
         self.status = 'active'
         self.spawn_round([p.token for p in self.players])
 
-    async def record_result(self, room_code: str, winner_token: str) -> None:
+    async def record_result(self, room_code: str, winner_token: str | None) -> None:
         if self.status != 'active' or not self.rounds:
             return
         current = self.rounds[-1]
         item = next((m for m in current if m['code'] == room_code), None)
-        if item is None or item['winner'] is not None or winner_token not in item['players']:
+        if item is None or item['winner'] is not None:
+            return
+        if winner_token is None:
+            # A drawn match *ends* at round 11 and yields 1 point to each.
+            # Knockout bracket cannot eliminate fairly on a draw: start a separate rematch.
+            new_code = unique_code(ROOMS)
+            old_room = ROOMS[room_code]
+            ROOMS[new_code] = Room(code=new_code,
+                players=[Player(p.token, p.name, p.user_id) for p in old_room.players],
+                match=Match(), tournament_code=self.code)
+            item['code'] = new_code
+            item['replays'] = item.get('replays', 0) + 1
+            return
+        if winner_token not in item['players']:
             return
         item['winner'] = winner_token
         if all(m['winner'] is not None for m in current):
@@ -220,7 +243,7 @@ class Tournament:
             'rounds': [[{
                 'room': m['code'],
                 'players': [self.name_of(x) for x in m['players']],
-                'winner': self.name_of(m['winner'])
+                'winner': self.name_of(m['winner']), 'replays': m.get('replays', 0)
             } for m in matches] for matches in self.rounds],
             'my_match': my_match,
             'champion': self.name_of(self.champion),
@@ -271,6 +294,21 @@ async def enter_account(data: Credentials):
 @app.get('/api/auth/me')
 async def my_account(user=Depends(auth_token)):
     return user
+
+
+@app.get('/api/users/{username}/profile')
+async def get_user_profile(username: str, user=Depends(auth_token)):
+    if not 3 <= len(username) <= 20:
+        raise HTTPException(400, 'Geçersiz kullanıcı adı.')
+    profile = stats.user_profile(username)
+    if not profile:
+        raise HTTPException(404, 'Kullanıcı profili bulunamadı.')
+    return profile
+
+
+@app.get('/api/leaderboard')
+async def leaderboard(user=Depends(auth_token)):
+    return {'rules': {'win':3,'draw':1,'loss':0}, 'players':stats.standings()}
 
 
 @app.post('/api/auth/logout')
@@ -411,6 +449,29 @@ async def join_room(code: str, user=Depends(auth_token)):
         room.match = Match()
         await room.broadcast()
     return {'code': code, 'token': token}
+
+
+@app.post('/api/rooms/{code}/forfeit')
+async def forfeit_room(code: str, user=Depends(auth_token)):
+    room = ROOMS.get(code.upper())
+    if not room:
+        raise HTTPException(404, 'Maç odası bulunamadı.')
+    async with room.lock:
+        idx = next((i for i,p in enumerate(room.players) if p.user_id == user['id']), None)
+        if idx is None:
+            raise HTTPException(403, 'Bu maçın oyuncusu değilsin.')
+        if not room.match or len(room.players) < 2:
+            return {'ok':True, 'status':'lobby-left'}
+        if room.match.phase == 'finished':
+            return {'ok':True, 'status':'already-finished'}
+        room.match.forfeit(idx)
+        if room.timer_task:
+            room.timer_task.cancel()
+        if room.next_task:
+            room.next_task.cancel()
+        await room.broadcast()
+        await room.finish_match()
+        return {'ok':True, 'status':'forfeit', 'winner':room.players[1-idx].name,'score':room.match.scores}
 
 
 @app.get('/api/rooms/{code}/state')

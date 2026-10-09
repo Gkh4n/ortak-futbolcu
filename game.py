@@ -149,8 +149,20 @@ PLAYER_HISTORIES: list[tuple[str, tuple[str, ...]]] = [
     ('Virgil van Dijk', ('Liverpool', 'Southampton')),
     ('Martin Ødegaard', ('Real Madrid', 'Arsenal')),
     ('Alexander Isak', ('Borussia Dortmund', 'Newcastle United', 'Liverpool')),
+    ('Gabriel Martinelli', ('Arsenal',)),
+    ('Gabriel Magalhães', ('Arsenal', 'Lille')),
 ]
 
+from expanded_players import EXTRA_HISTORIES
+# Merge by canonical footballer identity; the extra collection extends senior-club spells.
+_combined = {normalize(n): (n, set(cs)) for n, cs in PLAYER_HISTORIES}
+for n, clubs in EXTRA_HISTORIES:
+    k = normalize(n)
+    if k in _combined:
+        _combined[k][1].update(clubs)
+    else:
+        _combined[k] = (n, set(clubs))
+PLAYER_HISTORIES = [(n, tuple(sorted(clubs, key=normalize))) for n, clubs in _combined.values()]
 CLUBS = sorted(set(c for _, cs in PLAYER_HISTORIES for c in cs), key=normalize)
 PLAYER_NAMES = [n for n, _ in PLAYER_HISTORIES]
 PAIR_PLAYERS: dict[frozenset[str], list[str]] = {}
@@ -161,13 +173,14 @@ for name, clubs in PLAYER_HISTORIES:
 
 # Short forms that still unambiguously denote a senior professional.
 PLAYER_ALIASES = {
-    'cr7': 'Cristiano Ronaldo', 'ronaldo': 'Cristiano Ronaldo',
-    'r9': 'Ronaldo Nazário', 'ronaldo nazario': 'Ronaldo Nazário',
+    'cr7': 'Cristiano Ronaldo',
+    'ronaldo nazario': 'Ronaldo Nazário',
     'ozil': 'Mesut Özil', 'dzeko': 'Edin Džeko', 'sneijder': 'Wesley Sneijder',
     'van persie': 'Robin van Persie', 'ibra': 'Zlatan Ibrahimović',
     'messi': 'Lionel Messi', 'kdb': 'Kevin De Bruyne',
     'auba': 'Pierre-Emerick Aubameyang', 'hakimi': 'Achraf Hakimi',
     'mbappe': 'Kylian Mbappé', 'ramos': 'Sergio Ramos',
+    'r9': 'Ronaldo Nazário', 'fenomen': 'Ronaldo Nazário',
 }
 
 
@@ -183,10 +196,13 @@ def valid_player_for_pair(answer: str, club_a: str, club_b: str) -> str | None:
     for name in candidates:
         if key == normalize(name):
             return name
-    # Unique last name among ALL players avoids ambiguous 'Ronaldo'.
-    surname_hits = [name for name in PLAYER_NAMES if normalize(name).split(' ')[-1] == key and len(key) >= 4]
-    if len(surname_hits) == 1 and surname_hits[0] in candidates:
-        return surname_hits[0]
+    # Short footballer names are resolved in the context of the two selected clubs.
+    # 'Ronaldo' for Real/Barca means Nazário, Real/Juve means Cristiano;
+    # 'Gabriel' for Barcelona/Arsenal means Gabriel Jesus if present.
+    if len(key) >= 4:
+        matches = [name for name in candidates if key in (normalize(name).split(' ')[0], normalize(name).split(' ')[-1])]
+        if len(matches) == 1:
+            return matches[0]
     return None
 
 
@@ -199,6 +215,7 @@ class Match:
     picks: dict[int, str] = field(default_factory=dict)
     pair: tuple[str, str] | None = None
     winner: int | None = None
+    finish_reason: str | None = None
     event: dict = field(default_factory=dict)
     overtime: bool = False
     timeout_at: float | None = None
@@ -269,7 +286,14 @@ class Match:
             win = 0 if a > b else 1
         if win is not None:
             self.winner = win
+            self.finish_reason = 'normal'
             self.phase = 'finished'
+            return True
+        if self.round_number >= 11:
+            self.winner = None
+            self.finish_reason = 'draw'
+            self.phase = 'finished'
+            self.event = {'kind':'draw', 'headline':'Maç berabere bitti!', 'detail':'11 tur sonunda eşitlik bozulmadı. İki oyuncuya da 1 lig puanı.'}
             return True
         self.round_number += 1
         self.overtime = self.round_number > 7
@@ -280,3 +304,17 @@ class Match:
         self.event = {}
         self.timeout_at = None
         return False
+
+
+    def forfeit(self, departing: int) -> None:
+        if self.phase == 'finished':
+            raise ValueError('Bu maç zaten tamamlandı.')
+        if departing not in (0,1):
+            raise ValueError('Oyuncu geçersiz.')
+        self.winner = 1 - departing
+        self.scores = [0,0]
+        self.scores[self.winner] = 3
+        self.phase = 'finished'
+        self.finish_reason = 'forfeit'
+        self.timeout_at = None
+        self.event = {'kind':'forfeit', 'headline':'Hükmen galibiyet!', 'detail':'Rakibin maçtan ayrıldı; hükmen 3–0.'}

@@ -46,6 +46,9 @@ public final class MainActivity extends Activity {
     private int notificationCounter = 200;
 
     public final class NativeBridge {
+        @JavascriptInterface public void exitApp() {
+            runOnUiThread(() -> finish());
+        }
         @JavascriptInterface public void notify(String title, String body) {
             // WebView only loads the trusted Ortak Futbolcu origin.
             runOnUiThread(() -> postGameNotification(title, body));

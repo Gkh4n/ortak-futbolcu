@@ -4,25 +4,40 @@ const toastEl = document.getElementById('toast');
 const app = {
   mode: 'home', config: {clubs:[],player_count:0,answer_seconds:11},
   name: '', user:null, session: localStorage.getItem('of_session') || '', room:null, tournament:null,
-  socket:null, pingInterval:null, tournamentInterval:null, connectSeq:0, socialSocket:null, socialTimer:null, social:null, searchResults:[], backDialog:false,
+  socket:null, pingInterval:null, tournamentInterval:null, connectSeq:0, socialSocket:null, socialTimer:null, social:null, searchResults:[], backDialog:false, profile:null,
 };
 function esc(x){return String(x ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function urlParam(key, val){const u=new URL(location.href);u.search='';if(key)u.searchParams.set(key,val);history.replaceState({game:true},'',u.pathname+u.search);}
+function matchInProgress(){return app.mode==='room' && app.room?.state && !['finished','lobby'].includes(app.room.state.phase);}
 function showLeave(){
   if(document.getElementById('leave-overlay'))return;
-  const current=app.mode;
-  const text=current==='room'?'Maçtan ayrılırsan rakibin seni beklemeye devam eder. Ayrılmak istediğine emin misin?':
-    current==='tournament'?'Turnuvadan çıkarsan eşleşmeni daha sonra oda bağlantısından açabilirsin.':'Ana ekrana dönmek istiyor musun?';
+  const match=matchInProgress(), home=app.mode==='home'||app.mode==='auth';
+  const heading=match?'Maçtan ayrılacak mısın?':home?'Oyundan çıkmak istiyor musun?':'Ana ekrana dön';
+  const detail=match?'Maçtan ayrılırsan rakibin hükmen 3–0 kazanacak. Bu sonuç profilinde mağlubiyet olarak kaydedilecek.':
+    home?'Ortak Futbolcu uygulamasından çıkmak istediğine emin misin?':'Bu sayfadan ayrılmak istiyor musun?';
   const overlay=document.createElement('div');overlay.id='leave-overlay';overlay.className='leave-overlay';
-  overlay.innerHTML=`<div class="leave-dialog" role="dialog" aria-modal="true"><span class="overline">ARENA</span><h2>Çıkmak istiyor musun?</h2><p>${text}</p><div class="form-row"><button class="btn secondary" data-action="cancel-leave">VAZGEÇ</button><button class="btn" data-action="confirm-leave">AYRIL</button></div></div>`;
+  overlay.innerHTML=`<div class="leave-dialog" role="dialog" aria-modal="true"><span class="overline">ARENA</span><h2>${heading}</h2><p>${detail}</p><div class="form-row"><button class="btn secondary" data-action="cancel-leave">VAZGEÇ</button><button class="btn" data-action="confirm-leave">${match?'HÜKMEN AYRIL':home?'ÇIKIŞ':'GERİ DÖN'}</button></div></div>`;
   document.body.append(overlay);
 }
 function exitOverlay(){document.getElementById('leave-overlay')?.remove();}
-// Keep an application history entry so Android/browser Back can be handled inside the SPA.
+function goBack(){
+ if(document.getElementById('leave-overlay')){exitOverlay();return;}
+ if(app.mode==='room'){
+   if(app.room?.state?.phase==='finished'&&app.room?.state?.tournament){
+     const code=app.room.state.tournament, token=localStorage.getItem(`of_tournament_${code}`);
+     if(token){loadTournament(code,token);return;}
+   }
+   if(app.room?.state?.phase==='finished'||app.room?.state?.phase==='lobby'){goHome();return;}
+   showLeave();return;
+ }
+ if(app.mode==='home'||app.mode==='auth'){showLeave();return;}
+ goHome();
+}
+// Browser and Android back both follow the current in-app screen.
 history.replaceState({gameBase:true},'',location.href);
 history.pushState({game:true},'',location.href);
-window.addEventListener('popstate',()=>{history.pushState({game:true},'',location.href);if(app.mode!=='home'&&app.mode!=='auth')showLeave();else if(app.mode==='home')toast('Oyundan çıkmak için sekmeyi kapatabilirsin.');});
-window.ortakBack=()=>{if(app.mode==='home'||app.mode==='auth')return false;showLeave();return true;};
+window.addEventListener('popstate',()=>{history.pushState({game:true},'',location.href);goBack();});
+window.ortakBack=()=>{goBack();return true;};
 function toast(message){toastEl.textContent=message;toastEl.style.display='block';clearTimeout(toast.timer);toast.timer=setTimeout(()=>toastEl.style.display='none',3500);}
 function currentName(){return app.user?.username || null;}
 async function api(path,opts={}){const response=await fetch(path,{...opts,headers:{'Content-Type':'application/json',...(app.session ? {Authorization:`Bearer ${app.session}`} : {}),...(opts.headers||{})}});let data;try{data=await response.json();}catch{throw Error('Sunucuya ulaşılamadı.');}if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Bir işlem başarısız oldu.');return data;}
@@ -74,11 +89,26 @@ function renderHome(){app.mode='home';document.body.dataset.mode='home';screen.i
   </section>
   <section class="home-main-actions">
     <div class="welcome-card"><span class="avatar big-avatar">${esc(app.name.charAt(0).toUpperCase())}</span><div class="profile-head"><span class="overline">OYUNCU PROFİLİ</span><h2>Hoş geldin, ${esc(app.name)}!</h2><p>Bir arkadaşına meydan oku veya turnuvaya katıl.</p></div></div>
+    <div class="home-profile-actions"><button class="btn secondary" data-action="my-profile">◉ PROFİLİM</button><button class="btn secondary" data-action="leaderboard">🏆 PUAN DURUMU</button></div>
     <button class="btn friend-card-btn" data-action="friends"><span>♧</span><span><strong>Arkadaşlarım</strong><small>${friendCount()} arkadaş · İstekler ve davetler</small></span><span class="friend-alert">${noticeCount()?noticeCount()+' yeni':'→'}</span></button>
     <div class="home-join-row"><button class="btn secondary" data-action="join-room-open">⌁ ODA KODUYLA KATIL</button><button class="btn secondary" data-action="join-tournament-open">🏆 TURNUVAYA KATIL</button></div>
     <div class="home-mini-stats"><span>⚔ 1V1 DÜELLO</span><span>♛ 4 / 8 / 16</span><span>⏱ 11 SANİYE</span></div>
     <button class="logout-link" data-action="logout">↪ Hesaptan çık</button>
   </section>`;
+}
+function profileResultBadge(v){return v==='win'?'GALİBİYET':v==='draw'?'BERABERLİK':'MAĞLUBİYET';}
+async function showProfile(username){
+  const data=await api('/api/users/'+enc(username)+'/profile');
+  app.mode='profile';app.profile=data;urlParam();document.body.dataset.mode='profile';
+  screen.innerHTML=`<section class="profile-page"><button class="back" data-action="back">← GERİ</button>
+  <div class="panel profile-hero"><div class="avatar big-avatar">${esc(data.username[0].toUpperCase())}</div><div><span class="overline">OYUNCU KARTI</span><h1>${esc(data.username)}</h1><p>Toplam <strong>${data.points}</strong> lig puanı</p></div></div>
+  <div class="profile-stats"><div><strong>${data.played}</strong><small>MAÇ</small></div><div><strong>${data.wins}</strong><small>GALİBİYET</small></div><div><strong>${data.draws}</strong><small>BERABERLİK</small></div><div><strong>${data.losses}</strong><small>MAĞLUBİYET</small></div></div>
+  <div class="panel"><span class="overline">MAÇ GEÇMİŞİ</span>${data.history.length?data.history.map(m=>`<div class="history-row"><span class="result-mark ${esc(m.result)}">${profileResultBadge(m.result)}</span><span class="history-other">${esc(m.opponent)}</span><strong>${m.for} – ${m.against}</strong><small>${m.reason==='forfeit'?'Hükmen':''}</small></div>`).join(''):'<p class="helper">Henüz tamamlanmış maç bulunmuyor.</p>'}</div>
+  <p class="helper center">Galibiyet 3 · Beraberlik 1 · Mağlubiyet 0 puan</p></section>`;
+}
+async function showLeaderboard(){
+  const data=await api('/api/leaderboard');app.mode='leaderboard';urlParam();document.body.dataset.mode='leaderboard';
+  screen.innerHTML=`<section class="standings-page"><button class="back" data-action="back">← GERİ</button><span class="overline">CANLI SIRALAMA</span><h1>PUAN <span class="accent">DURUMU</span></h1><p class="helper">Galibiyet 3 · Beraberlik 1 · Mağlubiyet 0 puan</p><div class="panel table-scroll"><table class="league-table"><thead><tr><th>#</th><th>OYUNCU</th><th>O</th><th>G</th><th>B</th><th>M</th><th>PUAN</th></tr></thead><tbody>${data.players.map((p,i)=>`<tr><td>${i+1}</td><td><button class="profile-name-link" data-action="profile" data-name="${esc(p.username)}">${esc(p.username)}</button></td><td>${p.played}</td><td>${p.wins}</td><td>${p.draws}</td><td>${p.losses}</td><td><strong>${p.points}</strong></td></tr>`).join('')||'<tr><td colspan="7">Henüz tamamlanmış maç yok.</td></tr>'}</tbody></table></div></section>`;
 }
 function notificationContent(n){
   const name=esc(n.sender_name);
@@ -91,12 +121,12 @@ function renderFriends(){app.mode='friends';document.body.dataset.mode='friends'
   screen.innerHTML=`<section class="social-page"><button class="back" data-action="home">← ANA SAYFA</button><div class="social-heading"><div><span class="overline">SOSYAL ARENA</span><h1>Arkadaşlarım <span class="accent">${r.friends.length}</span></h1><p class="helper">Kullanıcı adını arat, arkadaş ekle ve tek dokunuşla düelloya çağır.</p></div><div class="social-icon">♧</div></div>
   <div class="panel social-panel"><span class="overline">OYUNCU ARA</span><form id="friend-search-form" class="social-search"><input class="input" id="friend-search" placeholder="Kullanıcı adı yaz..." minlength="2" maxlength="20" value="${esc(app.searchTerm||'')}" autocomplete="off"><button type="submit" class="btn">ARA</button></form><div id="search-results">${search.map(u=>socialUserRow(u)).join('')||'<p class="helper">En az 2 harf yazarak oyuncu ara.</p>'}</div></div>
   ${r.incoming.length?`<div class="panel social-panel"><span class="overline">GELEN İSTEKLER · ${r.incoming.length}</span>${r.incoming.map(u=>`<div class="social-row"><span class="avatar">${esc(u.username[0])}</span><div class="social-identity"><strong>${esc(u.username)}</strong><small>Arkadaşlık isteği</small></div><button class="btn small" data-action="accept-friend" data-id="${esc(u.id)}">KABUL</button><button class="btn ghost small" data-action="decline-friend" data-id="${esc(u.id)}">✕</button></div>`).join('')}</div>`:''}
-  <div class="panel social-panel"><span class="overline">ARKADAŞ LİSTESİ · ${r.friends.length}</span>${r.friends.length?r.friends.map(u=>`<div class="social-row"><span class="avatar">${esc(u.username[0])}</span><div class="social-identity"><strong>${esc(u.username)}</strong><small>Arkadaşın</small></div><button class="btn small" data-action="invite-friend" data-id="${esc(u.id)}">⚔ DAVET ET</button></div>`).join(''):'<p class="helper">Henüz arkadaşın yok. Yukarıdan kullanıcı arayabilirsin.</p>'}</div>
+  <div class="panel social-panel"><span class="overline">ARKADAŞ LİSTESİ · ${r.friends.length}</span>${r.friends.length?r.friends.map(u=>`<div class="social-row"><span class="avatar">${esc(u.username[0])}</span><div class="social-identity"><button class="profile-name-link" data-action="profile" data-name="${esc(u.username)}">${esc(u.username)}</button><small>Arkadaşın</small></div><button class="btn small" data-action="invite-friend" data-id="${esc(u.id)}">⚔ DAVET ET</button></div>`).join(''):'<p class="helper">Henüz arkadaşın yok. Yukarıdan kullanıcı arayabilirsin.</p>'}</div>
   ${r.outgoing.length?`<div class="panel social-panel"><span class="overline">YANIT BEKLENENLER</span>${r.outgoing.map(u=>`<div class="social-row"><span class="avatar">${esc(u.username[0])}</span><div class="social-identity"><strong>${esc(u.username)}</strong><small>Arkadaşlık isteği gönderildi</small></div><span class="pill">BEKLİYOR</span></div>`).join('')}</div>`:''}
   <div class="panel social-panel"><div class="panel-header"><div><span class="overline">BİLDİRİMLER</span><p class="helper">İstek ve maç davetlerin burada saklanır.</p></div>${noticeCount()?'<button class="btn small secondary" data-action="read-notifications">OKUNDU</button>':''}</div>
   ${(typeof Notification!=='undefined'&&Notification.permission==='default'&&typeof AndroidBridge==='undefined')?'<button class="btn small secondary" data-action="enable-notifications">🔔 SİSTEM BİLDİRİMLERİNİ AÇ</button>':''}${d.notifications.length?d.notifications.slice(0,24).map(n=>`<div class="social-row notification-row ${n.unread?'is-unread':''}"><span class="avatar">${n.category==='game_invite'?'⚔':'♧'}</span><div class="social-identity"><span>${notificationContent(n)}</span><small>${new Date(n.created_at*1000).toLocaleString('tr-TR')}</small></div>${n.category==='game_invite'&&n.room_code?`<button class="btn small" data-action="open-invite" data-code="${esc(n.room_code)}">KATIL</button>`:n.category==='friend_request'?`<button class="btn small" data-action="accept-friend" data-id="${esc(n.sender_id)}">KABUL</button>`:''}</div>`).join(''):'<p class="helper">Henüz bildirim bulunmuyor.</p>'}</div></section>`;
 }
-function socialUserRow(u){const status=u.status;return `<div class="social-row"><span class="avatar">${esc(u.username[0])}</span><div class="social-identity"><strong>${esc(u.username)}</strong><small>${status==='friend'?'Arkadaşın':status==='sent'?'İstek gönderildi':status==='received'?'Sana istek gönderdi':'Oyuncu'}</small></div>${status==='none'?`<button class="btn small" data-action="add-friend" data-id="${esc(u.id)}">+ EKLE</button>`:status==='received'?`<button class="btn small" data-action="accept-friend" data-id="${esc(u.id)}">KABUL</button>`:`<span class="pill">${status==='friend'?'ARKADAŞ':'BEKLİYOR'}</span>`}</div>`;}
+function socialUserRow(u){const status=u.status;return `<div class="social-row"><span class="avatar">${esc(u.username[0])}</span><div class="social-identity"><button class="profile-name-link" data-action="profile" data-name="${esc(u.username)}">${esc(u.username)}</button><small>${status==='friend'?'Arkadaşın':status==='sent'?'İstek gönderildi':status==='received'?'Sana istek gönderdi':'Oyuncu'}</small></div>${status==='none'?`<button class="btn small" data-action="add-friend" data-id="${esc(u.id)}">+ EKLE</button>`:status==='received'?`<button class="btn small" data-action="accept-friend" data-id="${esc(u.id)}">KABUL</button>`:`<span class="pill">${status==='friend'?'ARKADAŞ':'BEKLİYOR'}</span>`}</div>`;}
 async function fetchSocial(){if(!app.session)return;app.social=await api('/api/social');if(app.mode==='friends')renderFriends();else if(app.mode==='home')renderHome();}
 function closeSocial(){if(app.socialSocket){app.socialSocket.onclose=null;app.socialSocket.close();app.socialSocket=null;}if(app.socialTimer){clearInterval(app.socialTimer);app.socialTimer=null;}}
 function connectSocial(){closeSocial();if(!app.session)return;let cancelled=false;
@@ -125,7 +155,7 @@ function readyPlayers(state){return `<div class="players-grid compact-ready">${s
 function usedBlock(state){return `<details class="used-panel"><summary>⊘ &nbsp; Elenen takımlar <strong>${state.used.length}</strong><span>⌄</span></summary>${state.used.length?`<div class="used-list">${state.used.map(n=>`<span class="used-item">${esc(n)}</span>`).join('')}</div>`:'<p class="helper">Henüz elenen takım yok.</p>'}</details>`;}
 function matchClub(name){return `<div class="match-club"><div class="club-badge large-badge">${badgeLabel(name)}</div><strong>${esc(name)}</strong></div>`;}
 function renderRoom(){if(!app.room||!app.room.state)return;app.mode='room';document.body.dataset.mode='room';const s=app.room.state,me=s.me;
-const label=s.overtime?'UZATMA · ALTIN PUAN':`TUR ${s.round} / 7`;
+const label=s.overtime?`UZATMA · ${s.round}/11`:`TUR ${s.round} / 7`;
 const progress=s.overtime?'':`<div class="round-progress">${Array.from({length:7},(_,i)=>`<div class="round-dot ${i<s.round-1?'done':i===s.round-1?'current':''}"></div>`).join('')}</div>`;
 let board='';
 if(s.phase==='lobby'){
@@ -142,9 +172,9 @@ ${!done?`<form id="answer-form" class="answer-bar"><input id="answer" class="inp
 }else if(s.phase==='result'){
 const e=s.event||{},same=e.kind==='same';board=`<div class="result-hero"><div class="result-symbol ${same?'same':''}">${same?'⟷':e.kind==='point'?'✓':'⌛'}</div><span class="overline">${same?'AYNI TAKIM SEÇİLDİ':e.kind==='point'?'PUAN KAZANILDI':'PUANSIZ TUR'}</span><h2>${esc(e.headline||'Tur tamamlandı')}</h2><p>${esc(e.detail||'')}</p>${e.kind==='point'?`<span class="pill">+1 PUAN · ${esc(s.players[e.scorer]?.name||'Oyuncu')}</span>`:''}<p class="helper">Sonraki tur hazırlanıyor...</p></div>`;
 }else if(s.phase==='finished'){
-const won=s.winner===me;board=`<div class="result-hero"><div class="champion">${won?'🏆':'⚔'}</div><span class="overline">MAÇ BİTTİ</span><h2>${won?'ZAFER SENİN!':'MAÇ TAMAMLANDI'}</h2><div class="win-name">${esc(s.players[s.winner]?.name||'Oyuncu')} kazandı</div><p>${s.scores[0]} — ${s.scores[1]} • ${s.round}. tur</p>${s.tournament?'<button class="btn block" data-action="back-to-tournament">TURNUVA TABLOSUNA DÖN</button>':'<button class="btn block" data-action="home">ANA SAYFA</button>'}</div>`;
+const won=s.winner===me,draw=s.winner===null;board=`<div class="result-hero"><div class="champion">${draw?'🤝':won?'🏆':'⚔'}</div><span class="overline">MAÇ BİTTİ</span><h2>${draw?'BERABERE!':won?'ZAFER SENİN!':'MAÇ TAMAMLANDI'}</h2><div class="win-name">${draw?'İki oyuncu da +1 lig puanı kazandı':esc(s.players[s.winner]?.name||'Oyuncu')+' kazandı'}</div>${s.event?.kind==='forfeit'?'<p>Hükmen 3–0</p>':''}<p>${s.scores[0]} — ${s.scores[1]} • ${s.round}. tur</p>${s.tournament?'<button class="btn block" data-action="back-to-tournament">TURNUVA TABLOSUNA DÖN</button>':'<button class="btn block" data-action="home">ANA SAYFA</button>'}</div>`;
 }
-screen.innerHTML=`<section class="game-page"><div class="game-head"><button class="leave-match" data-action="leave-match" aria-label="Maçtan çık">✕</button><div class="compact-scoreboard"><div class="score-player ${me===0?'self':''}"><span class="avatar">${esc((s.players[0]?.name||'O')[0].toUpperCase())}</span><span class="score-name">${esc(s.players[0]?.name||'Bekleniyor')}</span></div><div class="score-center"><strong>${s.scores[0]} - ${s.scores[1]}</strong></div><div class="score-player right ${me===1?'self':''}"><span class="score-name">${esc(s.players[1]?.name||'Rakip bekleniyor')}</span><span class="avatar">${esc((s.players[1]?.name||'R')[0].toUpperCase())}</span></div></div></div><div class="game-meta"><span class="pill ${s.overtime?'gold':''}">${esc(label)}</span><span class="room-tag">ODA · ${esc(s.code)}</span></div>${progress}<div class="game-board">${board}</div>${usedBlock(s)}<div class="room-extras"><button class="btn ghost small" data-action="copy-room">⌁ ODA BAĞLANTISINI PAYLAŞ</button>${s.tournament?'<button class="btn ghost small" data-action="back-to-tournament">🏆 TURNUVA</button>':''}</div></section>`;
+screen.innerHTML=`<section class="game-page"><div class="game-head"><button class="leave-match" data-action="leave-match" aria-label="Maçtan çık">✕</button><div class="compact-scoreboard"><div class="score-player ${me===0?'self':''}"><span class="avatar">${esc((s.players[0]?.name||'O')[0].toUpperCase())}</span><button class="score-name profile-name-link" data-action="profile" data-name="${esc(s.players[0]?.name||'')}">${esc(s.players[0]?.name||'Bekleniyor')}</button></div><div class="score-center"><strong>${s.scores[0]} - ${s.scores[1]}</strong></div><div class="score-player right ${me===1?'self':''}"><button class="score-name profile-name-link" data-action="profile" data-name="${esc(s.players[1]?.name||'')}">${esc(s.players[1]?.name||'Rakip bekleniyor')}</button><span class="avatar">${esc((s.players[1]?.name||'R')[0].toUpperCase())}</span></div></div></div><div class="game-meta"><span class="pill ${s.overtime?'gold':''}">${esc(label)}</span><span class="room-tag">ODA · ${esc(s.code)}</span></div>${progress}<div class="game-board">${board}</div>${usedBlock(s)}<div class="room-extras"><button class="btn ghost small" data-action="copy-room">⌁ ODA BAĞLANTISINI PAYLAŞ</button>${s.tournament?'<button class="btn ghost small" data-action="back-to-tournament">🏆 TURNUVA</button>':''}</div></section>`;
 if(s.phase==='answer')updateCountdown();
 }
 function updateCountdown(){const s=app.room?.state,el=document.getElementById('countdown');if(!s||s.phase!=='answer'||!el)return;const sec=Math.max(0,Math.ceil((s.deadline*1000-Date.now())/1000));el.textContent=String(sec).padStart(2,'0');el.classList.toggle('urgent',sec<=3);}
@@ -173,11 +203,26 @@ async function loadTournament(code,token){closeSocket();stopPolling();app.mode='
  await refresh();app.tournamentInterval=setInterval(refresh,2400);
 }
 async function handleClick(button){const action=button.dataset.action;try{
- if(action==='home'){goHome();return;}
- if(action==='leave-match'){showLeave();return;}
+ if(action==='home'){if(matchInProgress()){showLeave();return;}goHome();return;}
+ if(action==='back'){goBack();return;}
+ if(action==='my-profile'){await showProfile(app.name);return;}
+ if(action==='profile'){if(matchInProgress()){toast('Profilini maç bittikten sonra görüntüleyebilirsin.');return;}await showProfile(button.dataset.name);return;}
+ if(action==='leaderboard'){await showLeaderboard();return;}
+ if(action==='leave-match'){goBack();return;}
  if(action==='cancel-leave'){exitOverlay();return;}
- if(action==='confirm-leave'){goHome();return;}
- if(action==='friends'){closeSocket();stopPolling();app.room=null;app.tournament=null;urlParam();await fetchSocial();renderFriends();return;}
+ if(action==='confirm-leave'){
+  if(matchInProgress()){
+    button.disabled=true;
+    try{await api('/api/rooms/'+enc(app.room.code)+'/forfeit',{method:'POST'});goHome();}
+    catch(e){button.disabled=false;toast('Maçtan ayrılamadın: '+e.message);}
+  }else if(app.mode==='home'||app.mode==='auth'){
+    exitOverlay();
+    if(typeof AndroidBridge!=='undefined'&&AndroidBridge.exitApp){AndroidBridge.exitApp();}
+    else{location.replace('about:blank');}
+  }else{goHome();}
+  return;
+ }
+ if(action==='friends'){if(matchInProgress()){showLeave();return;}closeSocket();stopPolling();app.room=null;app.tournament=null;urlParam();await fetchSocial();renderFriends();return;}
  if(action==='add-friend'){await api('/api/social/requests',{method:'POST',body:JSON.stringify({user_id:button.dataset.id})});toast('Arkadaşlık isteği gönderildi!');await fetchSocial();return;}
  if(action==='accept-friend'||action==='decline-friend'){await api('/api/social/respond',{method:'POST',body:JSON.stringify({user_id:button.dataset.id,accept:action==='accept-friend'})});toast(action==='accept-friend'?'Artık arkadaşsınız!':'İstek reddedildi.');await fetchSocial();return;}
  if(action==='enable-notifications'){if(typeof Notification!=='undefined'){const result=await Notification.requestPermission();toast(result==='granted'?'Bildirimlere izin verildi.':'Bildirim izni verilmedi.');renderFriends();}return;}
@@ -203,7 +248,7 @@ async function handleClick(button){const action=button.dataset.action;try{
  const link=action==='copy-room'?`${location.origin}/?room=${enc(app.room.code)}`:tournamentInvite(app.tournament);
  try{await navigator.clipboard.writeText(link);toast('Davet bağlantısı kopyalandı!');}catch{window.prompt('Bağlantıyı kopyala:',link);}return;
  }
- if(action==='back-to-tournament'){const code=app.room?.state?.tournament;const token=localStorage.getItem(`of_tournament_${code}`);if(!code||!token){toast('Turnuva bilgisi bulunamadı.');return;}await loadTournament(code,token);return;}
+ if(action==='back-to-tournament'){if(matchInProgress()){showLeave();return;}const code=app.room?.state?.tournament;const token=localStorage.getItem(`of_tournament_${code}`);if(!code||!token){toast('Turnuva bilgisi bulunamadı.');return;}await loadTournament(code,token);return;}
  if(action==='play-tournament'){const code=app.tournament?.state?.my_match;if(!code)return;const token=app.tournament.token;connectRoom(code,token);return;}
 }catch(err){toast(err.message||'Bir hata oluştu.');}}
 document.addEventListener('click',(event)=>{const button=event.target.closest('[data-action]');if(button)handleClick(button);});
