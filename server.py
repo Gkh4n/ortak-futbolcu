@@ -128,7 +128,8 @@ class Room:
     async def _advance_after_delay(self) -> None:
         try:
             # Give players time to view revealed solutions without losing the round.
-            delay = 6.0 if self.match and self.match.event.get('revealed_players') else RESULT_SECONDS
+            pool = self.match.event.get('revealed_players') if self.match else []
+            delay = 6.0 if pool else 0.6
             await asyncio.sleep(delay)
             async with self.lock:
                 if not self.match or self.match.phase != 'result':

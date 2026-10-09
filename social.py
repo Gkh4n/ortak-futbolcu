@@ -195,7 +195,7 @@ def send_chat_message(user_id, friend_id, body):
     body=body.strip()
     if not 1 <= len(body) <= 500:
         raise ValueError('Mesaj 1 ile 500 karakter arasında olmalı.')
-    if any(ord(char)<32 and char not in '\\n\\t' for char in body):
+    if any(ord(char)<32 and char not in (chr(10), chr(9)) for char in body):
         raise ValueError('Mesaj geçersiz karakter içeriyor.')
     low,high=_pair(user_id,friend_id)
     now=int(time.time())
