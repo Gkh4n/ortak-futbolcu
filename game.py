@@ -156,6 +156,7 @@ PLAYER_HISTORIES: list[tuple[str, tuple[str, ...]]] = [
 from expanded_players import EXTRA_HISTORIES
 from community_histories import PLAYER_HISTORIES as COMMUNITY_HISTORIES
 from imported_missing_players import MISSING_HISTORIES
+from user_supplied_histories import PLAYER_HISTORIES as USER_SUPPLIED_HISTORIES
 # Merge by canonical footballer identity; the extra collection extends senior-club spells.
 CLUB_CANONICAL = {
  'Paris Saint-Germain':'PSG', 'Milan':'AC Milan', 'Atlético Madrid':'Atletico Madrid',
@@ -172,7 +173,12 @@ CLUB_CANONICAL = {
 def canonical_club(value: str) -> str:
     return CLUB_CANONICAL.get(value, value)
 _combined = {normalize(n): (n, {canonical_club(c) for c in cs}) for n, cs in PLAYER_HISTORIES}
-for n, clubs in (*EXTRA_HISTORIES, *COMMUNITY_HISTORIES, *MISSING_HISTORIES):
+# User-supplied histories extend existing player spells, not just missing names.
+# Caner Erkin played for Eyüpspor (2023-25) and Sakaryaspor (2025-26),
+# verified against TFF player registration #433728. Those are absent in
+# the supplied clean text, so they are independently supplemented here.
+VERIFIED_TFF_HISTORIES = [('Caner Erkin', ('Eyüpspor', 'Sakaryaspor'))]
+for n, clubs in (*EXTRA_HISTORIES, *COMMUNITY_HISTORIES, *MISSING_HISTORIES, *USER_SUPPLIED_HISTORIES, *VERIFIED_TFF_HISTORIES):
     k = normalize(n)
     if k in _combined:
         _combined[k][1].update(canonical_club(c) for c in clubs)
