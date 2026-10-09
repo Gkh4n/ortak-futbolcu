@@ -31,6 +31,10 @@ function goBack(){
    showLeave();return;
  }
  if(app.mode==='home'||app.mode==='auth'){showLeave();return;}
+ if(app.mode==='profile'){
+   if(app.profileReturnMode==='friends'){fetchSocial().then(renderFriends).catch(()=>goHome());return;}
+   if(app.profileReturnMode==='leaderboard'){showLeaderboard().catch(()=>goHome());return;}
+ }
  goHome();
 }
 // Browser and Android back both follow the current in-app screen.
@@ -98,7 +102,9 @@ function renderHome(){app.mode='home';document.body.dataset.mode='home';screen.i
 }
 function profileResultBadge(v){return v==='win'?'GALİBİYET':v==='draw'?'BERABERLİK':'MAĞLUBİYET';}
 async function showProfile(username){
+  const origin=app.mode;
   const data=await api('/api/users/'+enc(username)+'/profile');
+  app.profileReturnMode=origin==='friends'||origin==='leaderboard'?origin:'home';
   app.mode='profile';app.profile=data;urlParam();document.body.dataset.mode='profile';
   screen.innerHTML=`<section class="profile-page"><button class="back" data-action="back">← GERİ</button>
   <div class="panel profile-hero"><div class="avatar big-avatar">${esc(data.username[0].toUpperCase())}</div><div><span class="overline">OYUNCU KARTI</span><h1>${esc(data.username)}</h1><p>Toplam <strong>${data.points}</strong> lig puanı</p></div></div>
