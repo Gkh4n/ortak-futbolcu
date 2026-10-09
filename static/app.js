@@ -115,9 +115,21 @@ async function showLeaderboard(){
   const data=await api('/api/leaderboard');app.mode='leaderboard';urlParam();document.body.dataset.mode='leaderboard';
   screen.innerHTML=`<section class="standings-page"><button class="back" data-action="back">← GERİ</button><span class="overline">CANLI SIRALAMA</span><h1>PUAN <span class="accent">DURUMU</span></h1><p class="helper">Galibiyet 3 · Beraberlik 1 · Mağlubiyet 0 puan</p><div class="panel table-scroll"><table class="league-table"><thead><tr><th>#</th><th>OYUNCU</th><th>O</th><th>G</th><th>B</th><th>M</th><th>PUAN</th></tr></thead><tbody>${data.players.map((p,i)=>`<tr><td>${i+1}</td><td><button class="profile-name-link" data-action="profile" data-name="${esc(p.username)}">${esc(p.username)}</button></td><td>${p.played}</td><td>${p.wins}</td><td>${p.draws}</td><td>${p.losses}</td><td><strong>${p.points}</strong></td></tr>`).join('')||'<tr><td colspan="7">Henüz tamamlanmış maç yok.</td></tr>'}</tbody></table></div></section>`;
 }
+function friendRequestStatus(n){
+ if(n.category!=='friend_request')return '';
+ const rel=app.social?.relationships||{};
+ if((rel.friends||[]).some(u=>u.id===n.sender_id))return 'accepted';
+ if((rel.incoming||[]).some(u=>u.id===n.sender_id))return 'pending';
+ return n.request_status==='accepted'?'accepted':'closed';
+}
 function notificationContent(n){
   const name=esc(n.sender_name);
-  if(n.category==='friend_request')return `<strong>${name}</strong> sana arkadaşlık isteği gönderdi.`;
+  if(n.category==='friend_request'){
+    const status=friendRequestStatus(n);
+    if(status==='accepted')return `<strong>${name}</strong> artık arkadaşın.`;
+    if(status==='closed')return `<strong>${name}</strong> adlı oyuncunun arkadaşlık isteği artık geçerli değil.`;
+    return `<strong>${name}</strong> sana arkadaşlık isteği gönderdi.`;
+  }
   if(n.category==='friend_accepted')return `<strong>${name}</strong> arkadaşlık isteğini kabul etti.`;
   if(n.category==='message')return `<strong>${name}</strong> sana mesaj gönderdi.`;
   return `<strong>${name}</strong> seni 1v1 maça davet etti.`;
@@ -130,7 +142,7 @@ function renderFriends(){app.mode='friends';document.body.dataset.mode='friends'
   <div class="panel social-panel"><span class="overline">ARKADAŞ LİSTESİ · ${r.friends.length}</span>${r.friends.length?r.friends.map(u=>`<div class="social-row"><span class="avatar">${esc(u.username[0])}</span><div class="social-identity"><button class="profile-name-link" data-action="profile" data-name="${esc(u.username)}">${esc(u.username)}</button><small>Arkadaşın</small></div><button class="btn small secondary" data-action="chat" data-id="${esc(u.id)}" data-name="${esc(u.username)}">✉ MESAJ ${d.chat_unreads?.[u.id]?'<b class="dm-unread">'+d.chat_unreads[u.id]+'</b>':''}</button><button class="btn small" data-action="invite-friend" data-id="${esc(u.id)}">⚔ DAVET ET</button></div>`).join(''):'<p class="helper">Henüz arkadaşın yok. Yukarıdan kullanıcı arayabilirsin.</p>'}</div>
   ${r.outgoing.length?`<div class="panel social-panel"><span class="overline">YANIT BEKLENENLER</span>${r.outgoing.map(u=>`<div class="social-row"><span class="avatar">${esc(u.username[0])}</span><div class="social-identity"><strong>${esc(u.username)}</strong><small>Arkadaşlık isteği gönderildi</small></div><span class="pill">BEKLİYOR</span></div>`).join('')}</div>`:''}
   <div class="panel social-panel"><div class="panel-header"><div><span class="overline">BİLDİRİMLER</span><p class="helper">İstek ve maç davetlerin burada saklanır.</p></div>${noticeCount()?'<button class="btn small secondary" data-action="read-notifications">OKUNDU</button>':''}</div>
-  ${(typeof Notification!=='undefined'&&Notification.permission==='default'&&typeof AndroidBridge==='undefined')?'<button class="btn small secondary" data-action="enable-notifications">🔔 SİSTEM BİLDİRİMLERİNİ AÇ</button>':''}${d.notifications.length?d.notifications.slice(0,24).map(n=>`<div class="social-row notification-row ${n.unread?'is-unread':''}"><span class="avatar">${n.category==='game_invite'?'⚔':n.category==='message'?'✉':'♧'}</span><div class="social-identity"><span>${notificationContent(n)}</span><small>${new Date(n.created_at*1000).toLocaleString('tr-TR')}</small></div>${n.category==='game_invite'&&n.room_code?`<button class="btn small" data-action="open-invite" data-code="${esc(n.room_code)}">KATIL</button>`:n.category==='friend_request'?`<button class="btn small" data-action="accept-friend" data-id="${esc(n.sender_id)}">KABUL</button>`:n.category==='message'?`<button class="btn small secondary" data-action="chat" data-id="${esc(n.sender_id)}" data-name="${esc(n.sender_name)}">OKU</button>`:''}</div>`).join(''):'<p class="helper">Henüz bildirim bulunmuyor.</p>'}</div></section>`;
+  ${(typeof Notification!=='undefined'&&Notification.permission==='default'&&typeof AndroidBridge==='undefined')?'<button class="btn small secondary" data-action="enable-notifications">🔔 SİSTEM BİLDİRİMLERİNİ AÇ</button>':''}${d.notifications.length?d.notifications.slice(0,24).map(n=>`<div class="social-row notification-row ${n.unread?'is-unread':''}"><span class="avatar">${n.category==='game_invite'?'⚔':n.category==='message'?'✉':'♧'}</span><div class="social-identity"><span>${notificationContent(n)}</span><small>${new Date(n.created_at*1000).toLocaleString('tr-TR')}</small></div>${n.category==='game_invite'&&n.room_code?`<button class="btn small" data-action="open-invite" data-code="${esc(n.room_code)}">KATIL</button>`:n.category==='friend_request'?(friendRequestStatus(n)==='pending'?`<button class="btn small" data-action="accept-friend" data-id="${esc(n.sender_id)}">KABUL</button>`:friendRequestStatus(n)==='accepted'?'<span class="pill friend-status-accepted">✓ ARKADAŞSINIZ</span>':'<span class="pill friend-status-closed">KAPANDI</span>'):n.category==='message'?`<button class="btn small secondary" data-action="chat" data-id="${esc(n.sender_id)}" data-name="${esc(n.sender_name)}">OKU</button>`:''}</div>`).join(''):'<p class="helper">Henüz bildirim bulunmuyor.</p>'}</div></section>`;
 }
 function socialUserRow(u){const status=u.status;return `<div class="social-row"><span class="avatar">${esc(u.username[0])}</span><div class="social-identity"><button class="profile-name-link" data-action="profile" data-name="${esc(u.username)}">${esc(u.username)}</button><small>${status==='friend'?'Arkadaşın':status==='sent'?'İstek gönderildi':status==='received'?'Sana istek gönderdi':'Oyuncu'}</small></div>${status==='none'?`<button class="btn small" data-action="add-friend" data-id="${esc(u.id)}">+ EKLE</button>`:status==='received'?`<button class="btn small" data-action="accept-friend" data-id="${esc(u.id)}">KABUL</button>`:`<span class="pill">${status==='friend'?'ARKADAŞ':'BEKLİYOR'}</span>`}</div>`;}
 async function fetchSocial(){if(!app.session)return;app.social=await api('/api/social');if(app.mode==='friends')renderFriends();else if(app.mode==='messages')renderMessages();else if(app.mode==='home')renderHome();}
@@ -170,28 +182,45 @@ function renderMessages(){
 }
 function chatMessagesHtml(messages){
   const myId=app.user?.id;
-  return messages.length?messages.map(m=>`<div class="dm-message ${m.sender_id===myId?'mine':'theirs'}">
-    <div class="dm-bubble">${esc(m.body)}</div>
-    <span class="dm-time">${new Date(m.created_at*1000).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</span>
-  </div>`).join(''):'<p class="helper center dm-empty">Henüz mesaj yok. İlk mesajı sen gönder.</p>';
+  if(!messages.length)return `<div class="dm-empty-state">
+     <div class="dm-empty-symbol">✉</div>
+     <strong>Yeni bir sohbet başlat</strong>
+     <p>Arkadaşına bir mesaj gönder veya onu 1v1 maça davet et.</p>
+   </div>`;
+  let lastDay='';
+  return messages.map(m=>{
+    const day=new Date(m.created_at*1000).toLocaleDateString('tr-TR',{day:'numeric',month:'long',year:'numeric'});
+    const dateDivider=day!==lastDay?`<div class="dm-day"><span>${esc(day)}</span></div>`:'';
+    lastDay=day;
+    return dateDivider+`<div class="dm-message ${m.sender_id===myId?'mine':'theirs'}">
+      <div class="dm-bubble">${esc(m.body)}</div>
+      <span class="dm-time">${new Date(m.created_at*1000).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}</span>
+    </div>`;
+  }).join('');
 }
 function renderChat(){
   if(!app.chat)return;
   app.mode='chat';document.body.dataset.mode='chat';
   const f=app.chat.friend;
-  screen.innerHTML=`<section class="dm-page"><div class="dm-header">
-    <button class="back dm-back" data-action="chat-back">← GERİ</button>
-    <div class="avatar">${esc(f.username[0].toUpperCase())}</div>
-    <div class="dm-header-name"><strong>${esc(f.username)}</strong><small>Özel sohbet</small></div>
-    <button class="btn small secondary" data-action="invite-friend" data-id="${esc(f.id)}">⚔ DAVET ET</button>
-  </div>
-  <div class="dm-messages" id="dm-messages" aria-live="polite">${chatMessagesHtml(app.chat.messages||[])}</div>
-  <form id="dm-form" class="dm-form">
-    <input class="input" id="dm-input" type="text" placeholder="Mesaj yaz..." maxlength="500" autocomplete="off" aria-label="Mesajın" required>
-    <button class="btn" type="submit">GÖNDER</button>
-  </form></section>`;
+  screen.innerHTML=`<section class="dm-page" aria-label="${esc(f.username)} ile sohbet">
+    <div class="dm-header">
+      <button class="dm-back" data-action="chat-back" aria-label="Geri dön">←</button>
+      <div class="avatar dm-avatar">${esc(f.username[0].toUpperCase())}</div>
+      <div class="dm-header-name"><strong>${esc(f.username)}</strong><small>ARKADAŞ SOHBETİ</small></div>
+      <button class="dm-invite" data-action="invite-friend" data-id="${esc(f.id)}" title="Maça davet et">⚔ <span>DAVET</span></button>
+    </div>
+    <div class="dm-messages" id="dm-messages" role="log" aria-live="polite">${chatMessagesHtml(app.chat.messages||[])}</div>
+    <form id="dm-form" class="dm-form">
+      <textarea class="dm-input" id="dm-input" rows="1" placeholder="Bir mesaj yaz..." maxlength="500" autocomplete="off" enterkeyhint="send" aria-label="Mesajın" required></textarea>
+      <button class="dm-send" type="submit" aria-label="Mesaj gönder">➤</button>
+    </form>
+  </section>`;
+  // The former long friends page could leave the document scrolled to the bottom
+  // and hide the chat header on keyboard focus. Keep only message history scrollable.
+  window.scrollTo({top:0,left:0,behavior:'instant'});
   const log=document.getElementById('dm-messages');if(log)log.scrollTop=log.scrollHeight;
 }
+
 async function openChat(userId,username){
   if(matchInProgress()){toast('Sohbeti maç bitince açabilirsin.');return;}
   app.chatOrigin=app.mode==='messages'?'messages':'friends';
@@ -423,7 +452,17 @@ async function handleClick(button){const action=button.dataset.action;try{
  if(action==='chat-back'){if(app.chatOrigin==='messages')renderMessages();else renderFriends();return;}
  if(action==='friends'){if(matchInProgress()){showLeave();return;}closeSocket();stopPolling();app.room=null;app.tournament=null;urlParam();await fetchSocial();renderFriends();return;}
  if(action==='add-friend'){await api('/api/social/requests',{method:'POST',body:JSON.stringify({user_id:button.dataset.id})});toast('Arkadaşlık isteği gönderildi!');await fetchSocial();return;}
- if(action==='accept-friend'||action==='decline-friend'){await api('/api/social/respond',{method:'POST',body:JSON.stringify({user_id:button.dataset.id,accept:action==='accept-friend'})});toast(action==='accept-friend'?'Artık arkadaşsınız!':'İstek reddedildi.');await fetchSocial();return;}
+ if(action==='accept-friend'||action==='decline-friend'){
+   if(button.disabled)return;button.disabled=true;
+   try{
+     const result=await api('/api/social/respond',{method:'POST',body:JSON.stringify({user_id:button.dataset.id,accept:action==='accept-friend'})});
+     toast(result.already_friends?'Bu kişi zaten arkadaşın.':action==='accept-friend'?'Artık arkadaşsınız!':'İstek reddedildi.');
+   }catch(err){
+     if(/Yanıtlanabilecek bir arkadaşlık isteği bulunamadı/.test(err.message||'')){toast('İstek daha önce yanıtlanmış veya iptal edilmiş.');}
+     else toast(err.message||'İstek işlenemedi.');
+   }finally{await fetchSocial().catch(()=>{});button.disabled=false;}
+   return;
+ }
  if(action==='enable-notifications'){if(typeof Notification!=='undefined'){const result=await Notification.requestPermission();toast(result==='granted'?'Bildirimlere izin verildi.':'Bildirim izni verilmedi.');renderFriends();}return;}
  if(action==='read-notifications'){await api('/api/social/read',{method:'POST'});await fetchSocial();return;}
  if(action==='invite-friend'){const data=await api('/api/social/invite',{method:'POST',body:JSON.stringify({user_id:button.dataset.id})});localStorage.setItem(`of_room_${data.code}`,data.token);toast('Maç daveti anında gönderildi!');connectRoom(data.code,data.token);return;}
@@ -453,6 +492,16 @@ async function handleClick(button){const action=button.dataset.action;try{
 document.addEventListener('click',(event)=>{const button=event.target.closest('[data-action]');if(button)handleClick(button);});
 document.addEventListener('submit',(event)=>{if(event.target.id==='dm-form'){event.preventDefault();sendChat();return;}
  if(event.target.id==='friend-search-form'){event.preventDefault();const term=document.getElementById('friend-search')?.value?.trim()||'';app.searchTerm=term;api('/api/users/search?q='+enc(term)).then(x=>{app.searchResults=x.results;renderFriends();}).catch(e=>toast(e.message));return;}if(event.target.id==='auth-form'){event.preventDefault();doAuth().catch(err=>toast(err.message));return;}if(event.target.id==='practice-answer-form'){event.preventDefault();const name=document.getElementById('practice-answer')?.value.trim();if(name){const field=document.getElementById('practice-answer');if(field)field.disabled=true;practiceAction('answer',{name});}return;}if(event.target.id==='answer-form'){event.preventDefault();const text=document.getElementById('answer')?.value.trim();if(!text){toast('Futbolcu adını yaz.');return;}if(!app.socket||app.socket.readyState!==WebSocket.OPEN){toast('Bağlantı kurulamadı.');return;}app.socket.send(JSON.stringify({type:'answer',name:text}));const field=document.getElementById('answer');if(field){field.disabled=true;field.blur();}const submit=document.querySelector('#answer-form button[type=submit]');if(submit)submit.disabled=true;}});
+document.addEventListener('keydown',(event)=>{
+ if(event.target.id==='dm-input'&&event.key==='Enter'&&!event.shiftKey&&!event.isComposing){
+   event.preventDefault();sendChat();
+ }
+});
+document.addEventListener('input',(event)=>{
+ if(event.target.id==='dm-input'){
+   const field=event.target;field.style.height='auto';field.style.height=Math.min(field.scrollHeight,115)+'px';
+ }
+});
 document.addEventListener('input',(event)=>{if(event.target.id==='club-search'){const q=event.target.value.toLocaleLowerCase('tr-TR');document.querySelectorAll('.club-btn').forEach(b=>{b.hidden=!b.dataset.club.toLocaleLowerCase('tr-TR').includes(q);});}});
 async function boot(){try{app.config=await api('/api/config');}catch{toast('Sunucuya ulaşılamadı.');}
  if(app.session){try{app.user=await api('/api/auth/me');app.name=app.user.username;}catch{app.session='';localStorage.removeItem('of_session');}}

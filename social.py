@@ -94,6 +94,11 @@ def respond_request(user_id, sender_id, accept):
     with _connection() as db:
         _init(db)
         link=db.execute('SELECT status,requested_by FROM friend_links WHERE user_low=? AND user_high=?',(a,b)).fetchone()
+        if link and link['status']=='accepted' and accept:
+            # Repeated taps on stale notification cards are idempotent.
+            db.execute("UPDATE social_notifications SET unread=0 WHERE recipient=? AND sender=? AND category='friend_request'",
+                       (user_id,sender_id))
+            return {'ok':True,'accepted':True,'other_id':sender_id,'already_friends':True}
         if not link or link['status']!='pending' or link['requested_by']!=sender_id:
             raise ValueError('Yanıtlanabilecek bir arkadaşlık isteği bulunamadı.')
         if accept:
@@ -136,9 +141,24 @@ def notifications(user_id):
         rows=db.execute('''SELECT n.id,n.category,n.room_code,n.unread,n.created_at,u.username AS sender_name,u.id AS sender_id
           FROM social_notifications n JOIN users u ON n.sender=u.id
           WHERE n.recipient=? ORDER BY n.id DESC LIMIT 40''',(user_id,)).fetchall()
-        return [{'id':r['id'],'category':r['category'],'room_code':r['room_code'],
+        result=[]
+        for r in rows:
+            row={'id':r['id'],'category':r['category'],'room_code':r['room_code'],
                  'unread':bool(r['unread']),'created_at':r['created_at'],
-                 'sender_name':r['sender_name'],'sender_id':r['sender_id']} for r in rows]
+                 'sender_name':r['sender_name'],'sender_id':r['sender_id']}
+            if r['category']=='friend_request':
+                # A notification is historical. The button must reflect the LIVE relationship.
+                low,high=_pair(user_id,r['sender_id'])
+                link=db.execute('''SELECT status,requested_by FROM friend_links
+                    WHERE user_low=? AND user_high=?''',(low,high)).fetchone()
+                if link and link['status']=='accepted':
+                    row['request_status']='accepted'
+                elif link and link['status']=='pending' and link['requested_by']==r['sender_id']:
+                    row['request_status']='pending'
+                else:
+                    row['request_status']='closed'
+            result.append(row)
+        return result
 
 
 def mark_read(user_id):
