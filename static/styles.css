@@ -119,3 +119,7 @@ body[data-mode=profile] .footer,body[data-mode=leaderboard] .footer{opacity:.35}
 
 .club-badge img{width:86%;height:86%;object-fit:contain;background:#fff;border-radius:50%;padding:5px}
 .club-badge .crest-fallback{font-weight:900;font-size:22px}
+
+/* v0.4.2: locally hosted authentic emblems for every selectable club. */
+.club-emblem .club-logo,.club-badge .club-logo{display:block;width:100%;height:100%;object-fit:contain;background:#fff;border-radius:50%;padding:4px;box-sizing:border-box}
+.club-badge .club-logo{padding:6px}

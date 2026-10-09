@@ -154,8 +154,83 @@ function renderTournamentCreate(){app.mode='create-tournament';screen.innerHTML=
 <div class="form-group"><label>OYUNCU SAYISI</label><select id="tournament-size" class="input"><option value="4">4 Oyuncu · 2 Yarı Final + Final</option><option value="8">8 Oyuncu · Çeyrek Final + Yarı Final + Final</option><option value="16">16 Oyuncu · Son 16 + Final</option></select></div><button class="btn block" data-action="confirm-tournament">TURNUVAYI OLUŞTUR →</button></div>`;}
 function readyPlayers(state){return `<div class="players-grid compact-ready">${state.players.map((p,i)=>`<div class="player-mini"><div class="avatar">${esc(p.name.charAt(0).toUpperCase())}</div><div><strong>${esc(p.name)}${i===state.me?' (Sen)':''}</strong><small class="${p.ready?'ready':p.online?'':'offline'}">${p.ready?'✓ Hazır':p.online?'● Çevrim içi':'○ Çevrimdışı'}</small></div></div>`).join('')}</div>`;}
 function usedBlock(state){return `<details class="used-panel"><summary>⊘ &nbsp; Elenen takımlar <strong>${state.used.length}</strong><span>⌄</span></summary>${state.used.length?`<div class="used-list">${state.used.map(n=>`<span class="used-item">${esc(n)}</span>`).join('')}</div>`:'<p class="helper">Henüz elenen takım yok.</p>'}</details>`;}
-const CREST_IDS = {'Real Madrid':86,'Barcelona':81,'Manchester United':66,'Manchester City':65,'Liverpool':64,'Arsenal':57,'Chelsea':61,'Tottenham':73,'Bayern Münih':5,'Borussia Dortmund':4,'PSG':524,'Juventus':109,'Inter':108,'AC Milan':98,'Napoli':113,'Atletico Madrid':78,'Ajax':678,'Benfica':1903,'Porto':503,'Roma':100,'Fiorentina':99,'Torino':110,'Udinese':115,'Atalanta':102,'Lecce':5890,'Bologna':104};
-function clubCrest(name){const id=CREST_IDS[name];return id?`<img loading="lazy" alt="" src="https://crests.football-data.org/${id}.png" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'"><span class="crest-fallback" style="display:none">${badgeLabel(name)}</span>`:`<span class="crest-fallback">${badgeLabel(name)}</span>`;}
+// The match and practice team grids have EXACTLY 60 clubs, in the designer's order.
+// All 60 original club-crest image assets are served by our own static host.
+const TEAM_CRESTS = {
+  "Real Madrid": "/crests/01.svg",
+  "Barcelona": "/crests/02.svg",
+  "Manchester United": "/crests/03.svg",
+  "Manchester City": "/crests/04.svg",
+  "Liverpool": "/crests/05.svg",
+  "Arsenal": "/crests/06.svg",
+  "Chelsea": "/crests/07.svg",
+  "Tottenham": "/crests/08.svg",
+  "Bayern Münih": "/crests/09.svg",
+  "Borussia Dortmund": "/crests/10.svg",
+  "PSG": "/crests/11.svg",
+  "Juventus": "/crests/12.svg",
+  "Inter": "/crests/13.svg",
+  "AC Milan": "/crests/14.svg",
+  "Napoli": "/crests/15.svg",
+  "Atletico Madrid": "/crests/16.svg",
+  "Ajax": "/crests/17.svg",
+  "Benfica": "/crests/18.svg",
+  "Porto": "/crests/19.svg",
+  "Galatasaray": "/crests/20.svg",
+  "Fenerbahçe": "/crests/21.svg",
+  "Beşiktaş": "/crests/22.svg",
+  "Genoa": "/crests/23.svg",
+  "Parma": "/crests/24.svg",
+  "Kayserispor": "/crests/25.svg",
+  "Fiorentina": "/crests/26.svg",
+  "Sampdoria": "/crests/27.svg",
+  "Hellas Verona": "/crests/28.svg",
+  "Çaykur Rizespor": "/crests/29.svg",
+  "Torino": "/crests/30.svg",
+  "Atalanta": "/crests/31.svg",
+  "Gençlerbirliği": "/crests/32.svg",
+  "Ankaragücü": "/crests/33.svg",
+  "Udinese": "/crests/34.svg",
+  "Roma": "/crests/35.svg",
+  "Konyaspor": "/crests/36.svg",
+  "Trabzonspor": "/crests/37.svg",
+  "Bologna": "/crests/38.svg",
+  "Empoli": "/crests/39.svg",
+  "Braga": "/crests/40.svg",
+  "Palermo": "/crests/41.svg",
+  "Chievo Verona": "/crests/42.svg",
+  "Sporting CP": "/crests/43.svg",
+  "Sivasspor": "/crests/44.svg",
+  "Lecce": "/crests/45.svg",
+  "Vitória Guimarães": "/crests/46.svg",
+  "Antalyaspor": "/crests/47.svg",
+  "Bari": "/crests/48.svg",
+  "Salernitana": "/crests/49.svg",
+  "Monaco": "/crests/50.svg",
+  "Paços de Ferreira": "/crests/51.svg",
+  "Cagliari": "/crests/52.svg",
+  "Vitória Setúbal": "/crests/53.svg",
+  "Marseille": "/crests/54.svg",
+  "Kasımpaşa": "/crests/55.svg",
+  "Estoril": "/crests/56.svg",
+  "Rennes": "/crests/57.svg",
+  "Gil Vicente": "/crests/58.svg",
+  "Marítimo": "/crests/59.svg",
+  "Ascoli": "/crests/60.svg"
+};
+const CLUB_CHOICE_ORDER = ["Real Madrid","Barcelona","Manchester United","Manchester City","Liverpool","Arsenal","Chelsea","Tottenham","Bayern Münih","Borussia Dortmund","PSG","Juventus","Inter","AC Milan","Napoli","Atletico Madrid","Ajax","Benfica","Porto","Galatasaray","Fenerbahçe","Beşiktaş","Genoa","Parma","Kayserispor","Fiorentina","Sampdoria","Hellas Verona","Çaykur Rizespor","Torino","Atalanta","Gençlerbirliği","Ankaragücü","Udinese","Roma","Konyaspor","Trabzonspor","Bologna","Empoli","Braga","Palermo","Chievo Verona","Sporting CP","Sivasspor","Lecce","Vitória Guimarães","Antalyaspor","Bari","Salernitana","Monaco","Paços de Ferreira","Cagliari","Vitória Setúbal","Marseille","Kasımpaşa","Estoril","Rennes","Gil Vicente","Marítimo","Ascoli"];
+function selectionPool(){
+ const offered=Array.isArray(app.config.featured_clubs) && app.config.featured_clubs.length===60
+   ? app.config.featured_clubs : CLUB_CHOICE_ORDER;
+ const available=new Set(app.config.clubs);
+ return offered.filter(c=>available.has(c)).slice(0,60);
+}
+function clubCrest(name){
+ const path=TEAM_CRESTS[name];
+ return path
+   ? `<img class="club-logo" loading="lazy" decoding="async" alt="${esc(name)} arması" src="/static${path}">`
+   : `<span class="crest-fallback">${badgeLabel(name)}</span>`;
+}
 function matchClub(name){return `<div class="match-club"><div class="club-badge large-badge">${clubCrest(name)}</div><strong>${esc(name)}</strong></div>`;}
 function revealedAnswers(event){if(event?.kind!=='timeout')return '';
  const list=event.revealed_players||[];
@@ -171,7 +246,7 @@ let board='';
 if(s.phase==='lobby'){
 board=`<div class="center room-lobby"><div class="lobby-illustration">⚔</div><span class="overline">MAÇ ODASI HAZIR</span><h2>Rakibini bekliyorsun</h2><div class="lobby-code">${esc(s.code)}</div><p class="helper">Arkadaşına davet bağlantısını gönder veya arkadaş listesinden davet et.</p><button class="btn block" data-action="copy-room">⌁ DAVET BAĞLANTISINI KOPYALA</button><button class="btn secondary block" data-action="friends">♧ ARKADAŞLARIM</button></div>`;
 }else if(s.phase==='choose'){
-const chosen=Boolean(s.my_pick),free=app.config.clubs.filter(c=>!s.used.includes(c));
+const chosen=Boolean(s.my_pick),free=selectionPool().filter(c=>!s.used.includes(c));
 board=`<div class="arena-intro"><span class="overline">GİZLİ TAKIM SEÇİMİ</span><h2>${chosen?'Seçimin kilitlendi':'Bir takım seç'}</h2><p class="helper">${chosen?`<strong>${esc(s.my_pick)}</strong> seçtin. Rakibinin seçimi bekleniyor.`:'Rakibin hangi kulübü seçtiğini göremezsin. Elenen takımlar kullanılamaz.'}</p></div>${readyPlayers(s)}
 ${!chosen?`<input class="input club-search" type="search" id="club-search" placeholder="⌕  Takım ara..." autocomplete="off"><div class="club-grid">${free.map(c=>`<button class="club-btn" data-action="choose" data-club="${esc(c)}"><span class="club-emblem">${clubCrest(c)}</span><span>${esc(c)}</span></button>`).join('')}</div>`:`<div class="waiting-pick"><span class="spinner-ring"></span><strong>Rakip bekleniyor</strong><small>İki seçim tamamlanınca soru açılır.</small></div>`}
 ${s.event?.kind==='invalid'?`<p class="helper warning-text">⚠ ${esc(s.event.detail)}</p>`:''}`;
@@ -205,7 +280,7 @@ async function practiceAction(path,body){
  try{const opts={method:'POST'};if(body)opts.body=JSON.stringify(body);app.practice=await api('/api/practice/'+path,opts);renderPractice();}catch(e){toast(e.message);}
 }
 function renderPractice(){const s=app.practice;if(!s)return;app.mode='practice';document.body.dataset.mode='practice';
- const free=app.config.clubs.filter(c=>!s.used.includes(c));
+ const free=selectionPool().filter(c=>!s.used.includes(c));
  let board='';
  if(s.phase==='choose')board=`<div class="arena-intro"><span class="overline">TEK KİŞİLİK ANTRENMAN</span><h2>Bir takım seç</h2><p class="helper">Sistem ortak futbolcusu bulunan başka bir takım seçecek. 11 saniye içinde cevabı bul.</p></div><input class="input club-search" id="club-search" type="search" placeholder="⌕ Takım ara..." autocomplete="off"><div class="club-grid">${free.map(c=>`<button class="club-btn" data-action="practice-pick" data-club="${esc(c)}"><span class="club-emblem">${clubCrest(c)}</span><span>${esc(c)}</span></button>`).join('')}</div>`;
  else if(s.phase==='answer'){const [a,b]=s.clubs||['',''];board=`<div class="duel-stage"><div class="two-crests">${matchClub(a)}<div class="vs">VS</div>${matchClub(b)}</div><div class="timer-wrap"><div class="timer" id="countdown">11</div><span class="timer-label">SANİYE</span></div><h2 class="answer-title">Ortak oyuncu <span class="accent">kim?</span></h2><p class="helper center">Tek cevap hakkın var!</p><form id="practice-answer-form" class="answer-bar"><input class="input" id="practice-answer" autocomplete="off" placeholder="Futbolcu adı" maxlength="100" required><button class="btn block" type="submit">➤ GÖNDER</button></form><button class="btn secondary block pass-btn" data-action="practice-pass">PAS GEÇ →</button></div>`;}

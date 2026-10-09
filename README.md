@@ -56,3 +56,10 @@ Uygulama HTTPS/WSS üzerinden sunulmalıdır. Hesabın için şifre kurtarma, e-
 - `GET /api/users/{username}/profile`: oyuncunun oynadığı maç, galibiyet, beraberlik, mağlubiyet, lig puanı, son 12 maç.
 - `GET /api/leaderboard`: tüm oyuncuların puan sıralaması.
 - 226 örnek futbolcu ve 84 kulüp; 2026 Gabriel Jesus -> Barcelona güncellemesi, Ronaldo için takım çiftine göre ad çözümleme. Seçilen futbolcu arşivinin **tam ve canlı transfer feedi olmadığına** dikkat edin; oyuncularla devam eden doğrulama gerekiyor.
+
+
+## Kulüp armaları (v0.4.2)
+
+Maç ve tek kişilik antrenman ekranları kullanıcı tarafından belirlenen sabit sırada **60 kulüp** gösterir. Arama yalnızca bu 60 kulüp arasında yapılır; diğer kulüpler futbolcu geçmişi ve cevap doğrulama kayıtlarında korunur. Her seçilebilir kulübün gerçek amblemi `static/crests/01.svg`–`60.svg` altında yerel olarak sunulur.
+
+Amblem görselleri [JoseArroyave/football-logos](https://github.com/JoseArroyave/football-logos) kataloğundan alınmıştır (repo MIT lisanslıdır). Kulüp armaları ve markaları ilgili hak sahiplerinin ticari markalarıdır; katalog lisansı kulüp marka haklarının devredildiği anlamına gelmez.

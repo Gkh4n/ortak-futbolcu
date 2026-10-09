@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
 
-from game import CLUBS, PLAYER_NAMES, Match, PAIR_PLAYERS, valid_player_for_pair
+from game import CLUBS, FEATURED_CLUBS, PLAYER_NAMES, Match, PAIR_PLAYERS, valid_player_for_pair
 import accounts
 import social
 import stats
@@ -275,7 +275,7 @@ async def health():
 
 @app.get('/api/config')
 async def config():
-    return {'clubs': CLUBS, 'player_count': len(PLAYER_NAMES), 'answer_seconds': ANSWER_SECONDS}
+    return {'clubs': CLUBS, 'featured_clubs': FEATURED_CLUBS, 'player_count': len(PLAYER_NAMES), 'answer_seconds': ANSWER_SECONDS}
 
 
 @app.post('/api/auth/register')
