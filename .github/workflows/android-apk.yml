@@ -33,20 +33,20 @@ jobs:
       - name: Build APK
         run: gradle --no-daemon :app:assembleDebug
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk ../ortak-futbolcu-v0.1.0.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk ../ortak-futbolcu-v0.2.0.apk
       - name: Upload test APK
         uses: actions/upload-artifact@v4
         with:
-          name: ortak-futbolcu-v0.1.0
-          path: ortak-futbolcu-v0.1.0.apk
+          name: ortak-futbolcu-v0.2.0
+          path: ortak-futbolcu-v0.2.0.apk
       - name: Publish APK to GitHub Releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view android-v0.1.0 --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release upload android-v0.1.0 ../ortak-futbolcu-v0.1.0.apk --repo "${{ github.repository }}" --clobber
+          if gh release view android-v0.2.0 --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload android-v0.2.0 ../ortak-futbolcu-v0.2.0.apk --repo "${{ github.repository }}" --clobber
           else
-            gh release create android-v0.1.0 ../ortak-futbolcu-v0.1.0.apk --repo "${{ github.repository }}" \
-              --title 'Ortak Futbolcu Android v0.1.0 (Test)' \
-              --notes 'Online futbol oyunu Android test APK. Üyelik, 1v1, turnuva. İnternet gerekir. Debug imzalıdır.'
+            gh release create android-v0.2.0 ../ortak-futbolcu-v0.2.0.apk --repo "${{ github.repository }}" \
+              --title 'Ortak Futbolcu Android v0.2.0 (Test)' \
+              --notes 'Online futbol oyunu Android test APK. 11 saniye, tek cevap hakkı, arkadaş ekleme ve 1v1 davetleri, premium tasarım. Anlık bildirimler uygulama açıkken çalışır. İnternet gerekir. Debug imzalıdır.'
           fi
