@@ -1,0 +1,37 @@
+name: Apply Ortak Futbolcu v0.4.0
+on:
+  push:
+    paths:
+      - 'release-artifacts/game-v04.tar.xz.b64'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify and unpack gameplay update
+        run: |
+          set -euo pipefail
+          base64 --decode release-artifacts/game-v04.tar.xz.b64 > /tmp/ortak-game-v04.tar.xz
+          echo "cfb996962087cd55a665d8fa81dedbbafc26528704672e659a03ed537be620ac  /tmp/ortak-game-v04.tar.xz" | sha256sum --check
+          tar -xJf /tmp/ortak-game-v04.tar.xz
+          test -f community_histories.py
+          test -f tests/test_practice_v05.py
+      - name: Install test requirements
+        run: python -m pip install 'fastapi>=0.110,<1' 'httpx>=0.27' 'uvicorn>=0.25' 'psycopg[binary]>=3.2' 'pytest>=8'
+      - name: Check code and run all game tests
+        run: |
+          python -m compileall -q game.py server.py community_histories.py
+          PYTHONPATH=. python -m pytest -q
+      - name: Commit checked update to main
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add game.py server.py community_histories.py static/app.js static/styles.css android/app/build.gradle .github/workflows/android-apk.yml tests/test_game.py tests/test_practice_v05.py
+          if ! git diff --cached --quiet; then
+            git commit -m "Release v0.4: single-player practice, pass, player reveal, full team selection"
+            git push origin HEAD:main
+          fi
