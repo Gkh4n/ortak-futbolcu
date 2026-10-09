@@ -1,0 +1,40 @@
+name: Install game source
+on:
+  push:
+    paths:
+      - 'source-archive/**'
+      - '.github/workflows/install-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Verify and extract game sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat source-archive/part*.b64 | tr -d '\n\r' | base64 --decode > /tmp/ortak-futbolcu.tar.xz
+          echo "b9a2ee7982aa96dab503ee4877c7115720bb7470b0867731b2964a8894b05abf  /tmp/ortak-futbolcu.tar.xz" | sha256sum --check
+          tar -xJf /tmp/ortak-futbolcu.tar.xz
+          test -f server.py
+          test -f accounts.py
+          test -f game.py
+          test -f static/app.js
+          test -f render.yaml
+      - name: Commit extracted sources
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server.py game.py accounts.py requirements.txt render.yaml static/index.html static/app.js static/styles.css
+          if ! git diff --cached --quiet; then
+            git commit -m "Unpack ready-to-deploy football game"
+            git push
+          fi
